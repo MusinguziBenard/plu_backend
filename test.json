@@ -1,0 +1,133 @@
+{
+  "info": {
+    "name": "PLU BACKEND — BENARD KING FINAL AUTO TOKEN",
+    "description": "TOKEN IS AUTOMATIC. NO MANUAL COPY-PASTE. EVER.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. JOIN (AUTO)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    pm.collectionVariables.set('phone', '256700001234');",
+              "    pm.collectionVariables.set('password', 'king123');",
+              "    pm.collectionVariables.set('name', 'Auto King');",
+              "    console.log('Join success → ready for login');",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Auto King\",\n  \"phone\": \"256700001234\",\n  \"password\": \"king123\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/auth/join",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "auth", "join"]
+        }
+      }
+    },
+    {
+      "name": "2. LOGIN → AUTO SAVE TOKEN",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const json = pm.response.json();",
+              "    pm.collectionVariables.set('TOKEN', json.token);",
+              "    console.log('TOKEN AUTO SAVED:', json.token);",
+              "    pm.test('Token saved', () => pm.expect(json.token).to.be.a('string'));",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"256700001234\",\n  \"password\": \"king123\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/auth/login",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "3. MY PROFILE (AUTO TOKEN)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{TOKEN}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/api/user/me",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "user", "me"]
+        }
+      }
+    },
+    {
+      "name": "4. SUBMIT POST (AUTO TOKEN)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"AUTO POST FROM POSTMAN\",\n  \"description\": \"Token worked automatically\",\n  \"media_url\": \"https://res.cloudinary.com/djug6gxbi/image/upload/v1735668000/plu_5m.jpg\",\n  \"media_type\": \"image\",\n  \"category\": \"news\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/posts/create",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "posts", "create"]
+        }
+      }
+    },
+    {
+      "name": "5. PUBLIC FEED (NO TOKEN)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:3000/api/posts/feed",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "posts", "feed"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "TOKEN",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
