@@ -1,207 +1,47 @@
-// import { Router } from 'express'
-// import { requireAuth } from '../middleware/auth'
-// import { PostLike } from '../models/PostLike'
-// import { Post } from '../models/Post'
-
-// const router = Router()
-// router.use(requireAuth)
-
-// router.get('/', async (req, res) => {
-//   const userId = req.user.id
-
-//   const likes = await PostLike.findAll({
-//     where: { user_id: userId },
-//     include: [{
-//       model: Post,
-//       include: ['user']
-//     }]
-//   })
-
-//   const posts = likes.map((like: any) => like.post)
-//   res.json(posts)
-// })
-
-// router.post('/', async (req, res) => {
-//   const userId = req.user.id
-//   const { post_id } = req.body
-
-//   await PostLike.upsert({
-//     user_id: userId,
-//     post_id
-//   })
-
-//   res.json({ success: true, message: 'Post liked!' })
-// })
-
-// router.delete('/', async (req, res) => {
-//   const userId = req.user.id
-//   const { post_id } = req.body
-
-//   await PostLike.destroy({
-//     where: { user_id: userId, post_id }
-//   })
-
-//   res.json({ success: true, message: 'Like removed (swipe away!)' })
-// })
-
-// export default router
-
-
-// routes/likes.ts
-import { Router, Request, Response } from 'express'
+import { Router } from 'express'
+import { requireAuth } from '../middleware/auth'
 import { PostLike } from '../models/PostLike'
-import sequelize from '../config/sequelize'
+import { Post } from '../models/Post'
 
-// ---------------------------------------------------------------
-// 1. Query type – MUST have index signature for Express
-// ---------------------------------------------------------------
-interface IdsQuery {
-  post_ids?: string | string[]
-  [key: string]: any   // ← REQUIRED for ParsedQs compatibility
-}
-
-// ---------------------------------------------------------------
-// 2. Other types
-// ---------------------------------------------------------------
-interface ToggleLikeBody {
-  post_id: number | string
-}
-interface CountResult {
-  post_id: string
-  likes_count: number
-}
-interface StatusResult {
-  post_id: string
-  is_liked: boolean
-  likes_count: number
-}
-
-// ---------------------------------------------------------------
-// 3. Guest identifier (cookie-based)
-// ---------------------------------------------------------------
-const getUserIdentifier = (req: Request, res: Response): string => {
-  if (req.user?.id) return req.user.id
-
-  let sessionId = req.cookies?.guest_session
-  if (!sessionId) {
-    sessionId = require('crypto').randomUUID()
-    res.cookie('guest_session', sessionId, {
-      httpOnly: true,
-      maxAge: 365 * 24 * 60 * 60 * 1000,
-      sameSite: 'lax',
-    })
-  }
-  return `guest:${sessionId}`
-}
-
-// ---------------------------------------------------------------
-// 4. Router
-// ---------------------------------------------------------------
 const router = Router()
+router.use(requireAuth)
 
-// ========== TOGGLE LIKE (PUBLIC) ==========
-router.post(
-  '/',
-  async (req: Request<{}, {}, ToggleLikeBody>, res: Response) => {
-    const { post_id } = req.body
-    if (!post_id) return res.status(400).json({ error: 'post_id required' })
+router.get('/', async (req, res) => {
+  const userId = req.user.id
 
-    const postId = Number(post_id)
-    if (Number.isNaN(postId)) return res.status(400).json({ error: 'Invalid post_id' })
+  const likes = await PostLike.findAll({
+    where: { user_id: userId },
+    include: [{
+      model: Post,
+      include: ['user']
+    }]
+  })
 
-    const userId = getUserIdentifier(req, res)
+  const posts = likes.map((like: any) => like.post)
+  res.json(posts)
+})
 
-    try {
-      const [like, created] = await PostLike.findOrCreate({
-        where: { user_id: userId, post_id: postId },
-        defaults: { user_id: userId, post_id: postId },
-      })
+router.post('/', async (req, res) => {
+  const userId = req.user.id
+  const { post_id } = req.body
 
-      if (!created) {
-        await like.destroy()
-        return res.json({ success: true, liked: false })
-      }
+  await PostLike.upsert({
+    user_id: userId,
+    post_id
+  })
 
-      return res.json({ success: true, liked: true })
-    } catch (err: any) {
-      if (err.name === 'SequelizeUniqueConstraintError') {
-        return res.status(409).json({ error: 'Already liked' })
-      }
-      return res.status(500).json({ error: err.message })
-    }
-  }
-)
+  res.json({ success: true, message: 'Post liked!' })
+})
 
-// ========== PUBLIC LIKE COUNTS ==========
-router.get(
-  '/counts',
-  async (req: Request<{}, {}, {}, IdsQuery>, res: Response) => {
-    const { post_ids } = req.query
-    if (!post_ids) return res.status(400).json({ error: 'post_ids required' })
+router.delete('/', async (req, res) => {
+  const userId = req.user.id
+  const { post_id } = req.body
 
-    const ids = Array.isArray(post_ids) ? post_ids : String(post_ids).split(',')
+  await PostLike.destroy({
+    where: { user_id: userId, post_id }
+  })
 
-    const rows = await PostLike.findAll({
-      attributes: [
-        'post_id',
-        [sequelize.fn('COUNT', sequelize.col('PostLike.id')), 'likes_count'],
-      ],
-      where: { post_id: ids.map(Number) },
-      group: ['post_id'],
-      raw: true,
-    })
-
-    const map = Object.fromEntries(
-      (rows as any[]).map(r => [String(r.post_id), Number(r.likes_count)])
-    )
-
-    const result: CountResult[] = ids.map(id => ({
-      post_id: id,
-      likes_count: map[id] ?? 0,
-    }))
-
-    return res.json({ success: true, counts: result })
-  }
-)
-
-// ========== USER STATUS (GUEST OR LOGGED-IN) ==========
-router.get(
-  '/status',
-  async (req: Request<{}, {}, {}, IdsQuery>, res: Response) => {
-    const { post_ids } = req.query
-    if (!post_ids) return res.status(400).json({ error: 'post_ids required' })
-
-    const ids = Array.isArray(post_ids) ? post_ids : String(post_ids).split(',')
-    const userId = getUserIdentifier(req, res)
-
-    const userLikes = await PostLike.findAll({
-      where: { user_id: userId, post_id: ids.map(Number) },
-      attributes: ['post_id'],
-      raw: true,
-    })
-    const likedSet = new Set((userLikes as any[]).map(l => String(l.post_id)))
-
-    const counts = await PostLike.findAll({
-      attributes: [
-        'post_id',
-        [sequelize.fn('COUNT', sequelize.col('PostLike.id')), 'likes_count'],
-      ],
-      where: { post_id: ids.map(Number) },
-      group: ['post_id'],
-      raw: true,
-    })
-    const countMap = Object.fromEntries(
-      (counts as any[]).map(c => [String(c.post_id), Number(c.likes_count)])
-    )
-
-    const result: StatusResult[] = ids.map(id => ({
-      post_id: id,
-      is_liked: likedSet.has(id),
-      likes_count: countMap[id] ?? 0,
-    }))
-
-    return res.json({ success: true, status: result })
-  }
-)
+  res.json({ success: true, message: 'Like removed (swipe away!)' })
+})
 
 export default router
