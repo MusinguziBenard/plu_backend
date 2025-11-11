@@ -47,27 +47,24 @@
 // export default router
 
 
-
-
 // routes/likes.ts
 import { Router, Request, Response } from 'express'
-import { requireAuth } from '../middleware/auth'
 import { PostLike } from '../models/PostLike'
 import sequelize from '../config/sequelize'
 
-// LOCAL AUGMENTATION – fixes duplicate declaration error
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: { id: number }
-  }
-}
-
-// Types
-interface ToggleLikeBody {
-  post_id: number | string
-}
+// ---------------------------------------------------------------
+// 1. Query type – MUST have index signature for Express
+// ---------------------------------------------------------------
 interface IdsQuery {
   post_ids?: string | string[]
+  [key: string]: any   // ← REQUIRED for ParsedQs compatibility
+}
+
+// ---------------------------------------------------------------
+// 2. Other types
+// ---------------------------------------------------------------
+interface ToggleLikeBody {
+  post_id: number | string
 }
 interface CountResult {
   post_id: string
@@ -79,20 +76,40 @@ interface StatusResult {
   likes_count: number
 }
 
+// ---------------------------------------------------------------
+// 3. Guest identifier (cookie-based)
+// ---------------------------------------------------------------
+const getUserIdentifier = (req: Request, res: Response): string => {
+  if (req.user?.id) return req.user.id
+
+  let sessionId = req.cookies?.guest_session
+  if (!sessionId) {
+    sessionId = require('crypto').randomUUID()
+    res.cookie('guest_session', sessionId, {
+      httpOnly: true,
+      maxAge: 365 * 24 * 60 * 60 * 1000,
+      sameSite: 'lax',
+    })
+  }
+  return `guest:${sessionId}`
+}
+
+// ---------------------------------------------------------------
+// 4. Router
+// ---------------------------------------------------------------
 const router = Router()
 
-// TOGGLE LIKE
+// ========== TOGGLE LIKE (PUBLIC) ==========
 router.post(
   '/',
-  requireAuth,
   async (req: Request<{}, {}, ToggleLikeBody>, res: Response) => {
-    const userId = (req as any).user.id
     const { post_id } = req.body
-
     if (!post_id) return res.status(400).json({ error: 'post_id required' })
 
     const postId = Number(post_id)
     if (Number.isNaN(postId)) return res.status(400).json({ error: 'Invalid post_id' })
+
+    const userId = getUserIdentifier(req, res)
 
     try {
       const [like, created] = await PostLike.findOrCreate({
@@ -102,10 +119,10 @@ router.post(
 
       if (!created) {
         await like.destroy()
-        return res.json({ success: true, liked: false, message: 'Like removed' })
+        return res.json({ success: true, liked: false })
       }
 
-      return res.json({ success: true, liked: true, message: 'Post liked' })
+      return res.json({ success: true, liked: true })
     } catch (err: any) {
       if (err.name === 'SequelizeUniqueConstraintError') {
         return res.status(409).json({ error: 'Already liked' })
@@ -115,7 +132,7 @@ router.post(
   }
 )
 
-// PUBLIC COUNTS – FIXED TYPO HERE
+// ========== PUBLIC LIKE COUNTS ==========
 router.get(
   '/counts',
   async (req: Request<{}, {}, {}, IdsQuery>, res: Response) => {
@@ -140,23 +157,22 @@ router.get(
 
     const result: CountResult[] = ids.map(id => ({
       post_id: id,
-      likes_count: map[id] ?? 0,   // ← FIXED: was likes_count_count
+      likes_count: map[id] ?? 0,
     }))
 
     return res.json({ success: true, counts: result })
   }
 )
 
-// USER STATUS + COUNTS
+// ========== USER STATUS (GUEST OR LOGGED-IN) ==========
 router.get(
   '/status',
-  requireAuth,
   async (req: Request<{}, {}, {}, IdsQuery>, res: Response) => {
-    const userId = (req as any).user.id
     const { post_ids } = req.query
     if (!post_ids) return res.status(400).json({ error: 'post_ids required' })
 
     const ids = Array.isArray(post_ids) ? post_ids : String(post_ids).split(',')
+    const userId = getUserIdentifier(req, res)
 
     const userLikes = await PostLike.findAll({
       where: { user_id: userId, post_id: ids.map(Number) },
