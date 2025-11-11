@@ -1,11 +1,15 @@
-// routes/posts.ts — FINAL FIXED VERSION
+// routes/posts.ts — FINAL: PUBLIC ROUTES FIRST, NO AUTH
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { Post } from '../models/Post'
+import { PostLike } from '../models/PostLike'
 
+// MAIN ROUTER
 const router = Router()
 
-// PUBLIC FEED — NO AUTH NEEDED
+// =================================
+// 1. PUBLIC ROUTES (NO AUTH EVER)
+// =================================
 router.get('/feed', async (req, res) => {
   const posts = await Post.findAll({
     where: { status: 'posted' },
@@ -19,11 +23,23 @@ router.get('/feed', async (req, res) => {
   res.json(posts)
 })
 
-// PROTECTED ROUTES
-router.use(requireAuth)
+router.get('/:id/likes', async (req, res) => {
+  try {
+    const count = await PostLike.count({ where: { post_id: req.params.id } })
+    res.json({ post_id: req.params.id, likes: count })
+  } catch (err) {
+    console.error('Likes error:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
 
-// USER: SUBMIT POST
-router.post('/create', async (req: any, res) => {
+// =================================
+// 2. PROTECTED ROUTES (AUTH REQUIRED)
+// =================================
+const protectedRouter = Router()
+protectedRouter.use(requireAuth)  // ← Only here
+
+protectedRouter.post('/create', async (req: any, res) => {
   const { title, description, media_url, media_type, category } = req.body
   const userId = req.user.id
 
@@ -36,54 +52,45 @@ router.post('/create', async (req: any, res) => {
     return res.status(400).json({ error: 'Invalid category' })
   }
 
-  try {
-    const post = await Post.create({
-      user_id: userId,
-      title,
-      description: description || '',
-      video_url: media_type === 'video' ? media_url : null,
-      photo_url: media_type !== 'video' ? media_url : null,
-      status: 'pending',
-      category,
-    })
+  const post = await Post.create({
+    user_id: userId,
+    title,
+    description: description || '',
+    video_url: media_type === 'video' ? media_url : null,
+    photo_url: media_type !== 'video' ? media_url : null,
+    status: 'pending',
+    category,
+  })
 
-    res.json({
-      success: true,
-      message: 'Post submitted for review!',
-      post: { id: post.id, title: post.title, status: post.status }
-    })
-  } catch (err: any) {
-    res.status(500).json({ error: err.message })
-  }
+  res.json({
+    success: true,
+    message: 'Post submitted!',
+    post: { id: post.id, title: post.title, status: post.status }
+  })
 })
 
-// ADMIN ROUTES — FIXED ROLE CHECK
+// ADMIN
 const isAdmin = (req: any) => req.user.user_metadata?.role === 'admin'
 
-router.post('/approve/:id', async (req: any, res) => {
+protectedRouter.post('/approve/:id', async (req: any, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
-
   const post = await Post.findByPk(req.params.id)
-  if (!post) return res.status(404).json({ error: 'Post not found' })
-
+  if (!post) return res.status(404).json({ error: 'Not found' })
   post.status = 'posted'
   await post.save()
-
-  res.json({ success: true, message: 'POST IS NOW LIVE!' })
+  res.json({ success: true, message: 'LIVE!' })
 })
 
-router.delete('/admin/delete/:id', async (req: any, res) => {
+protectedRouter.delete('/admin/delete/:id', async (req: any, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
-
   const post = await Post.findByPk(req.params.id)
   if (!post) return res.status(404).json({ error: 'Not found' })
   await post.destroy()
-  res.json({ success: true, message: 'Post deleted' })
+  res.json({ success: true })
 })
 
-router.get('/admin/pending', async (req: any, res) => {
+protectedRouter.get('/admin/pending', async (req: any, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
-
   const posts = await Post.findAll({
     where: { status: 'pending' },
     include: [{ model: require('../models/User').User, attributes: ['name', 'phone'] }],
@@ -91,5 +98,8 @@ router.get('/admin/pending', async (req: any, res) => {
   })
   res.json(posts)
 })
+
+// Mount protected routes under same paths
+router.use(protectedRouter)
 
 export default router

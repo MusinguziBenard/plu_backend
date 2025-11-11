@@ -1,22 +1,23 @@
 {
   "info": {
-    "name": "PLU BACKEND — BENARD KING FINAL AUTO TOKEN",
-    "description": "TOKEN IS AUTOMATIC. NO MANUAL COPY-PASTE. EVER.",
+    "_postman_id": "plu-full-flow-uganda-2025",
+    "name": "PLU Full Flow - Join → Login → Get Likes (Uganda)",
+    "description": "COMPLETE FLOW:\n1. Join (register)\n2. Login (auto-save token)\n3. Get like count (public)\n\nReal post ID: 704dfe66-02a2-474c-96a2-a017e8495436\n\nUses {{base_url}} and {{test_phone}}",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "1. JOIN (AUTO)",
+      "name": "1. Join PLU (Register New User)",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "if (pm.response.code === 200) {",
-              "    pm.collectionVariables.set('phone', '256700001234');",
-              "    pm.collectionVariables.set('password', 'king123');",
-              "    pm.collectionVariables.set('name', 'Auto King');",
-              "    console.log('Join success → ready for login');",
+              "const json = pm.response.json();",
+              "if (json.success) {",
+              "    console.log('User joined successfully!');",
+              "} else {",
+              "    console.warn('Join response:', json);",
               "}"
             ],
             "type": "text/javascript"
@@ -26,32 +27,36 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" }
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"Auto King\",\n  \"phone\": \"256700001234\",\n  \"password\": \"king123\"\n}"
+          "raw": "{\n  \"name\": \"Test User Uganda\",\n  \"phone\": \"{{test_phone}}\",\n  \"password\": \"test123\"\n}"
         },
         "url": {
-          "raw": "http://localhost:3000/api/auth/join",
-          "host": ["localhost"],
-          "port": "3000",
+          "raw": "{{base_url}}/api/auth/join",
+          "host": ["{{base_url}}"],
           "path": ["api", "auth", "join"]
         }
-      }
+      },
+      "response": []
     },
     {
-      "name": "2. LOGIN → AUTO SAVE TOKEN",
+      "name": "2. Login (Auto Save Token)",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "if (pm.response.code === 200) {",
-              "    const json = pm.response.json();",
-              "    pm.collectionVariables.set('TOKEN', json.token);",
-              "    console.log('TOKEN AUTO SAVED:', json.token);",
-              "    pm.test('Token saved', () => pm.expect(json.token).to.be.a('string'));",
+              "const json = pm.response.json();",
+              "if (json.success && json.token) {",
+              "    pm.environment.set('jwt', json.token);",
+              "    console.log('Login successful! Token saved.');",
+              "} else {",
+              "    console.error('Login failed:', json);",
               "}"
             ],
             "type": "text/javascript"
@@ -61,72 +66,77 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" }
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"phone\": \"256700001234\",\n  \"password\": \"king123\"\n}"
+          "raw": "{\n  \"phone\": \"{{test_phone}}\",\n  \"password\": \"test123\"\n}"
         },
         "url": {
-          "raw": "http://localhost:3000/api/auth/login",
-          "host": ["localhost"],
-          "port": "3000",
+          "raw": "{{base_url}}/api/auth/login",
+          "host": ["{{base_url}}"],
           "path": ["api", "auth", "login"]
         }
-      }
+      },
+      "response": []
     },
     {
-      "name": "3. MY PROFILE (AUTO TOKEN)",
+      "name": "3. Get Likes - Your Post (Public)",
       "request": {
         "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{TOKEN}}" }
-        ],
+        "header": [],
         "url": {
-          "raw": "http://localhost:3000/api/user/me",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["api", "user", "me"]
+          "raw": "{{base_url}}/api/posts/704dfe66-02a2-474c-96a2-a017e8495436/likes",
+          "host": ["{{base_url}}"],
+          "path": ["api", "posts", "704dfe66-02a2-474c-96a2-a017e8495436", "likes"]
         }
-      }
+      },
+      "response": []
     },
     {
-      "name": "4. SUBMIT POST (AUTO TOKEN)",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{TOKEN}}" },
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"title\": \"AUTO POST FROM POSTMAN\",\n  \"description\": \"Token worked automatically\",\n  \"media_url\": \"https://res.cloudinary.com/djug6gxbi/image/upload/v1735668000/plu_5m.jpg\",\n  \"media_type\": \"image\",\n  \"category\": \"news\"\n}"
-        },
-        "url": {
-          "raw": "http://localhost:3000/api/posts/create",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["api", "posts", "create"]
-        }
-      }
-    },
-    {
-      "name": "5. PUBLIC FEED (NO TOKEN)",
+      "name": "4. Get Public Feed",
       "request": {
         "method": "GET",
+        "header": [],
         "url": {
-          "raw": "http://localhost:3000/api/posts/feed",
-          "host": ["localhost"],
-          "port": "3000",
+          "raw": "{{base_url}}/api/posts/feed",
+          "host": ["{{base_url}}"],
           "path": ["api", "posts", "feed"]
         }
-      }
+      },
+      "response": []
+    },
+    {
+      "name": "5. Get My Profile (Uses Token)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/user/me",
+          "host": ["{{base_url}}"],
+          "path": ["api", "user", "me"]
+        }
+      },
+      "response": []
     }
   ],
   "variable": [
     {
-      "key": "TOKEN",
-      "value": "",
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "test_phone",
+      "value": "+256700000099",
       "type": "string"
     }
   ]
