@@ -1,3 +1,4 @@
+// routes/auth.ts — FINAL VERSION (YOUR CODE + LOGIN)
 import { Router } from 'express'
 import { supabaseAdmin } from '../utils/supabase'
 import { supabase } from '../utils/supabase'
@@ -5,22 +6,19 @@ import { User } from '../models/User'
 
 const router = Router()
 
+// YOUR ORIGINAL JOIN — WE KEEP 100%
 router.post('/join', async (req, res) => {
-  const { name, phone, password, role = 'user' } = req.body 
+  const { name, phone, password } = req.body
 
   if (!name || !phone || !password) {
     return res.status(400).json({ error: 'Name, phone, and password required' })
-  }
-
-  if (role === 'admin') {
-    return res.status(403).json({ error: 'Admin creation not allowed via join' })
   }
 
   try {
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email: `${phone}@plu.local`,
       password,
-      user_metadata: { name, phone, role }, // ← USE role FROM BODY
+      user_metadata: { name, phone, role: 'user' },  // ← ADD ROLE
       email_confirm: true
     })
 
@@ -35,7 +33,7 @@ router.post('/join', async (req, res) => {
       id: data.user.id,
       name,
       phone,
-      role 
+      role: 'user'
     })
 
     res.json({ success: true, message: 'Welcome to PLU! You can now log in.' })
@@ -44,6 +42,7 @@ router.post('/join', async (req, res) => {
   }
 })
 
+// NEW: LOGIN WITH PHONE + PASSWORD
 router.post('/login', async (req, res) => {
   const { phone, password } = req.body
 
@@ -61,8 +60,6 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid phone or password' })
     }
 
-    const role = data.user.user_metadata.role || 'user'
-
     res.json({
       success: true,
       token: data.session.access_token,
@@ -70,7 +67,7 @@ router.post('/login', async (req, res) => {
         id: data.user.id,
         name: data.user.user_metadata.name,
         phone: data.user.user_metadata.phone,
-        role 
+        role: data.user.user_metadata.role || 'user'
       }
     })
   } catch (err: any) {
