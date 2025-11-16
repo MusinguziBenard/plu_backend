@@ -100,6 +100,21 @@ protectedRouter.get('/admin/pending', async (req: any, res) => {
   res.json(posts)
 })
 
+
+protectedRouter.patch('/update/:id', async (req: any, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' });
+  const { title, category, media_url } = req.body;
+  const post = await Post.findByPk(req.params.id);
+  if (!post) return res.status(404).json({ error: 'Not found' });
+
+  post.title = title || post.title;
+  post.category = category || post.category;
+  if (media_url) post.photo_url = media_url;
+
+  await post.save();
+  res.json({ success: true });
+});
+
 // Mount protected routes under same paths
 router.use(protectedRouter)
 
