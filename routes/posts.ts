@@ -103,13 +103,16 @@ protectedRouter.get('/admin/pending', async (req: any, res) => {
 
 protectedRouter.patch('/update/:id', async (req: any, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' });
-  const { title, category, media_url } = req.body;
+  
+  const { title, category, media_url, description } = req.body;  // ← ADD description
   const post = await Post.findByPk(req.params.id);
   if (!post) return res.status(404).json({ error: 'Not found' });
 
-  post.title = title || post.title;
-  post.category = category || post.category;
-  if (media_url) post.photo_url = media_url;
+  // UPDATE ONLY IF PROVIDED
+  if (title !== undefined) post.title = title;
+  if (category !== undefined) post.category = category;
+  if (media_url !== undefined) post.photo_url = media_url;
+  if (description !== undefined) post.description = description;  // ← SAVE
 
   await post.save();
   res.json({ success: true });
