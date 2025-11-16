@@ -70,8 +70,9 @@ protectedRouter.post('/create', async (req: any, res) => {
 })
 
 // ADMIN
-const isAdmin = (req: any) => req.user.user_metadata?.role === 'admin'
-
+// routes/posts.ts — FINAL: 403 FIXED
+const isAdmin = (req: any) => 
+  req.user.role === 'admin' || req.user.user_metadata?.role === 'admin'  // ← CHECK BOTH
 protectedRouter.post('/approve/:id', async (req: any, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
   const post = await Post.findByPk(req.params.id)
