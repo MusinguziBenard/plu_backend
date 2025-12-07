@@ -57,9 +57,9 @@ app.use('/api/likes', likesRoutes)
 app.use('/api/posts', postsRoutes)
 
 // health check point
-// app.get("/health", (req, res) => {
-//   res.status(200).send("OK");
-// });
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
 
 // ======================== AI ASSISTANT ENDPOINT ========================
 app.post('/api/ai/ask', async (req, res) => {
