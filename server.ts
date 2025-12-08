@@ -38,7 +38,6 @@
 
 
 
-
 import dotenv from 'dotenv'
 dotenv.config()
 
@@ -61,8 +60,17 @@ app.use('/api/posts', postsRoutes)
 
 // AI Configuration (minimal, from .env)
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
+const GROK_API_KEY = process.env.GROK_API_KEY
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY
+
 if (!GEMINI_API_KEY) {
-  console.error('❌ GEMINI_API_KEY missing from .env – AI endpoint disabled')
+  console.error('❌ GEMINI_API_KEY missing from .env – AI endpoint degraded')
+}
+if (!GROK_API_KEY) {
+  console.warn('⚠️ GROK_API_KEY missing from .env – fallback disabled. See https://x.ai/api for details.')
+}
+if (!DEEPSEEK_API_KEY) {
+  console.warn('⚠️ DEEPSEEK_API_KEY missing from .env – tertiary fallback disabled. See https://platform.deepseek.com/api-docs/ for details.')
 }
 
 // PLU system prompt (concise)
@@ -164,7 +172,12 @@ const getGeminiResponse = async (userMessage: string): Promise<string> => {
               console.log(`Tokens used: ${data.usageMetadata.promptTokenCount + data.usageMetadata.candidatesTokenCount}`)
             }
             return text
+          } else {
+            // Invalid/short response, treat as error
+            lastError = new Error(`Model ${modelName}: Invalid or short response`)
           }
+        } else {
+          lastError = new Error(`Model ${modelName}: No candidates in response`)
         }
       } else {
         const errorText = await response.text()
@@ -185,7 +198,104 @@ const getGeminiResponse = async (userMessage: string): Promise<string> => {
   throw lastError || new Error('All Gemini models failed')
 }
 
+// Grok API fallback (OpenAI-compatible)
+const getGrokResponse = async (userMessage: string): Promise<string> => {
+  if (!GROK_API_KEY) {
+    throw new Error('GROK_API_KEY not configured. See https://x.ai/api for setup.')
+  }
+
+  console.log('🔄 Falling back to Grok API...')
+
+  try {
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GROK_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'grok-beta',  // Or 'grok-4' if available; check https://x.ai/api for latest
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+      }),
+    })
+
+    console.log('Grok response status:', response.status)
+
+    if (response.ok) {
+      const data = await response.json()
+      console.log('✅ Success with Grok')
+      const text = data.choices?.[0]?.message?.content?.trim()
+      if (text && text.length > 5) {
+        return text
+      } else {
+        throw new Error('Grok: Invalid or short response')
+      }
+    } else {
+      const errorText = await response.text()
+      console.error('Grok failed:', response.status, errorText)
+      throw new Error(`Grok: ${response.status} - ${errorText}`)
+    }
+  } catch (error) {
+    console.error('Grok API error:', error)
+    throw error
+  }
+}
+
+// DeepSeek API fallback (OpenAI-compatible)
+const getDeepSeekResponse = async (userMessage: string): Promise<string> => {
+  if (!DEEPSEEK_API_KEY) {
+    throw new Error('DEEPSEEK_API_KEY not configured. See https://platform.deepseek.com/api-docs/ for setup.')
+  }
+
+  console.log('🔄 Falling back to DeepSeek API...')
+
+  try {
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',  // Primary model; check https://platform.deepseek.com/api-docs/ for latest
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+      }),
+    })
+
+    console.log('DeepSeek response status:', response.status)
+
+    if (response.ok) {
+      const data = await response.json()
+      console.log('✅ Success with DeepSeek')
+      const text = data.choices?.[0]?.message?.content?.trim()
+      if (text && text.length > 5) {
+        return text
+      } else {
+        throw new Error('DeepSeek: Invalid or short response')
+      }
+    } else {
+      const errorText = await response.text()
+      console.error('DeepSeek failed:', response.status, errorText)
+      throw new Error(`DeepSeek: ${response.status} - ${errorText}`)
+    }
+  } catch (error) {
+    console.error('DeepSeek API error:', error)
+    throw error
+  }
+}
+
 // Minimal AI endpoint: POST /api/ai/chat { message: string } -> { response: string }
+// Fault-tolerant: Gemini first, then Grok, then DeepSeek
 app.post('/api/ai/chat', async (req, res) => {
   const { message } = req.body
 
@@ -194,10 +304,24 @@ app.post('/api/ai/chat', async (req, res) => {
   }
 
   try {
-    const aiResponse = await getGeminiResponse(message)
+    let aiResponse = ''
+    
+    // Try Gemini
+    try {
+      aiResponse = await getGeminiResponse(message)
+    } catch (geminiError) {
+      console.log('Gemini failed, trying Grok fallback...')
+      try {
+        aiResponse = await getGrokResponse(message)
+      } catch (grokError) {
+        console.log('Grok failed, trying DeepSeek fallback...')
+        aiResponse = await getDeepSeekResponse(message)
+      }
+    }
+    
     res.json({ response: aiResponse })
   } catch (error: any) {
-    console.error('❌ AI request failed:', error)
+    console.error('❌ All AI attempts failed:', error)
     res.status(500).json({ 
       error: 'AI service unavailable',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined 
@@ -213,7 +337,7 @@ sequelize.sync({ alter: true }).then(() => {
   console.log('Database connected & synced')
   const PORT = process.env.PORT || 3000
   app.listen(PORT, () => {
-    console.log(`Server running on ${PORT}`)
+    console.log(`Server running on http://localhost:${PORT}`)
   })
 })
 
