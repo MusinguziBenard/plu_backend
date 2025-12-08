@@ -35,7 +35,6 @@
 
 
 
-
 import dotenv from 'dotenv'
 dotenv.config()
 
@@ -54,33 +53,16 @@ app.use(express.json())
 app.use('/api/auth', authRoutes)
 app.use('/api/user', userRoutes)
 app.use('/api/likes', likesRoutes)
-app.use('/api/posts', postsRoutes)
+app.use('/api/posts', postsRoutes)     
 
-// ======================== AI ASSISTANT ENDPOINT ========================
-app.post('/api/ai/ask', async (req, res) => {
-  try {
-    const { question } = req.body
+// AI Configuration (loaded from .env)
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY
+if (!GEMINI_API_KEY) {
+  console.error('❌ GEMINI_API_KEY missing from .env – AI routes disabled')
+}
 
-    if (!question || typeof question !== 'string' || question.trim().length === 0) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Please ask a question to continue.' 
-      })
-    }
-
-    const trimmedQuestion = question.trim()
-    const geminiApiKey = process.env.GEMINI_API_KEY
-
-    // Check if API key is configured
-    if (!geminiApiKey) {
-      return res.status(500).json({
-        success: false,
-        error: 'AI service is not properly configured. Please contact support.',
-      })
-    }
-
-    // PLU context for the AI
-    const PLU_CONTEXT = `You are M.K AI, the official AI assistant for the Patriots League of Uganda (PLU).
+// PLU system prompt
+const SYSTEM_PROMPT = `You are M.K AI, the official AI assistant for the Patriots League of Uganda (PLU).
 
 IMPORTANT PLU INFORMATION:
 - Organization: Patriots League of Uganda (PLU)
@@ -92,252 +74,176 @@ IMPORTANT PLU INFORMATION:
 - Headquarters: Kampala, Uganda
 - Contact: info@plu.ug (for general inquiries)
 
-APPLICATION DEVELOPER INFORMATION:
-- Name: Musinguzi Benard
-- Education: Bachelor's Degree in Information Systems, Muni University (Graduated 2025)
-- Student ID: 2201200218
-- Political Affiliation: Supporter of NRM (National Resistance Movement) and PLU
-- Contact: +256 763 313 707
-- Email: musinguzibenard37@gmail.com, 2201200218@muni.ac.ug
-- Notable Projects Developed:
-  1. Muni University E-Voting System - Digital voting platform for university elections
-  2. SchoolMaster - Educational management system for schools
-  3. Muni Grad Space - Platform for Muni University graduates
-  4. Air Quality Monitoring System for Dar es Salaam - Environmental monitoring project
-  5. PLU Mobile App - This current application for Patriots League of Uganda
-- Skills: Software Development, Mobile App Development, Web Development, Database Management
-- Location: Uganda
-- University: Muni University, Arua, Uganda
-
 RESPONSE GUIDELINES:
 1. Always respond in clear, respectful Ugandan English
 2. Be informative and helpful about PLU matters
-3. If asked about the developer, provide accurate information from the developer section
-4. If you don't know specific details, be honest and suggest contacting PLU directly
-5. Emphasize PLU's positive impact on communities
-6. Highlight youth involvement and national development
-7. Keep responses concise but comprehensive
-8. Avoid political statements, focus on community development
-9. When discussing the developer, mention his educational background and projects with pride`
+3. If you don't know specific details, be honest and suggest contacting PLU directly
+4. Emphasize PLU's positive impact on communities
+5. Highlight youth involvement and national development
+6. Keep responses concise but comprehensive
+7. Avoid political statements, focus on community development`
 
-    const requestBody = {
-      contents: [{
-        parts: [{
-          text: `${PLU_CONTEXT}\n\nUser Question: ${trimmedQuestion}\n\nPlease provide a helpful response:`
-        }]
-      }],
-      generationConfig: {
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 1000,
-      },
-      safetySettings: [
-        {
-          category: "HARM_CATEGORY_HARASSMENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+const getGeminiResponse = async (userMessage: string): Promise<string> => {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY not configured')
+  }
+
+  console.log('🔄 Getting response from Gemini...')
+
+  // Try different models in order (updated for 2025 stability)
+  const modelsToTry = [
+    'gemini-2.0-flash',  // Fastest, free tier
+    'gemini-2.5-flash',  // Newer if available
+    'gemini-1.5-flash',  // Fallback
+  ]
+
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt < modelsToTry.length; attempt++) {
+    const modelName = modelsToTry[attempt]
+    try {
+      console.log(`Trying model: ${modelName}`)
+
+      const requestBody = {
+        contents: [{
+          parts: [{
+            text: `${SYSTEM_PROMPT}\n\nUser Question: ${userMessage}\n\nPlease provide a helpful response:`
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 1000,
         },
-        {
-          category: "HARM_CATEGORY_HATE_SPEECH",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        }
-      ]
-    }
-
-    // Try different models in order
-    const modelsToTry = [
-      'gemini-2.0-flash',
-      'gemini-1.5-flash',
-    ]
-
-    let responseData = null
-
-    for (const modelName of modelsToTry) {
-      try {
-        const geminiResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`,
+        safetySettings: [
           {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody),
-          }
-        )
-
-        if (geminiResponse.ok) {
-          const data = await geminiResponse.json()
-          
-          if (data.candidates && data.candidates.length > 0) {
-            const text = data.candidates[0].content.parts[0]?.text?.trim()
-            
-            if (text && text.length > 5) {
-              responseData = {
-                success: true,
-                answer: text,
-                timestamp: new Date().toISOString()
-              }
-              break
-            }
-          }
-        }
-      } catch {
-        // Silently try next model
-        continue
-      }
-    }
-
-    // If all models fail, try direct approach
-    if (!responseData) {
-      try {
-        const directResponse = await fetch(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
           {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-goog-api-key': geminiApiKey,
-            },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{
-                  text: `${PLU_CONTEXT}\n\nUser: ${trimmedQuestion}\n\nAssistant:`
-                }]
-              }],
-              generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 500,
-              }
-            }),
+            category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
           }
-        )
+        ]
+      }
 
-        if (directResponse.ok) {
-          const data = await directResponse.json()
-          if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-            responseData = {
-              success: true,
-              answer: data.candidates[0].content.parts[0].text.trim(),
-              timestamp: new Date().toISOString()
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        }
+      )
+
+      console.log(`Response Status for ${modelName}:`, response.status)
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log(`✅ Success with model: ${modelName}`)
+
+        if (data.candidates && data.candidates.length > 0) {
+          const text = data.candidates[0].content.parts[0]?.text?.trim()
+
+          if (text && text.length > 5) {
+            // Log token usage if available
+            if (data.usageMetadata) {
+              console.log(`Tokens used: ${data.usageMetadata.promptTokenCount + data.usageMetadata.candidatesTokenCount}`)
             }
+            return text
           }
         }
-      } catch {
-        // Silently handle error
+      } else {
+        const errorText = await response.text()
+        console.log(`Model ${modelName} failed:`, response.status, errorText)
+        lastError = new Error(`Model ${modelName}: ${response.status} - ${errorText}`)
       }
-    }
 
-    if (responseData) {
-      return res.status(200).json(responseData)
-    } else {
-      return res.status(503).json({
-        success: false,
-        error: 'Our AI assistant is currently unavailable. Please try again in a few moments.',
-      })
+      // Exponential backoff between attempts (1s, 2s, 4s)
+      if (attempt < modelsToTry.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
+      }
+    } catch (modelError) {
+      console.log(`Model ${modelName} error:`, modelError)
+      lastError = modelError as Error
     }
+  }
 
-  } catch {
-    return res.status(500).json({
-      success: false,
-      error: 'An unexpected error occurred. Please try again.',
+  // If all fail, throw the last error
+  throw lastError || new Error('All Gemini models failed')
+}
+
+// AI Routes (inline, no separate file)
+// POST /api/ai/chat
+app.post('/api/ai/chat', async (req, res) => {
+  const { message } = req.body
+
+  if (!message || typeof message !== 'string') {
+    return res.status(400).json({ error: 'Message is required and must be a string' })
+  }
+
+  try {
+    const aiResponse = await getGeminiResponse(message)
+    res.json({ response: aiResponse })
+  } catch (error: any) {
+    console.error('❌ AI request failed:', error)
+    res.status(500).json({ 
+      error: 'AI service unavailable',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined 
     })
   }
 })
 
-// ======================== HEALTH CHECK ========================
-app.get('/api/ai/health', async (req, res) => {
-  try {
-    const geminiApiKey = process.env.GEMINI_API_KEY
-    
-    if (!geminiApiKey) {
-      return res.status(200).json({
-        success: false,
-        status: 'unhealthy',
-        message: 'AI API key is not configured',
-      })
-    }
+// Optional: GET /api/ai/test for connection check
+app.get('/api/ai/test', async (req, res) => {
+  if (!GEMINI_API_KEY) {
+    return res.status(500).json({ error: 'API key not configured' })
+  }
 
-    const testResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: 'Hello'
-            }]
-          }],
-          generationConfig: {
-            maxOutputTokens: 10,
-          }
+          contents: [{ parts: [{ text: 'Hello' }] }],
+          generationConfig: { maxOutputTokens: 10 },
         }),
       }
     )
 
-    const isHealthy = testResponse.ok
-    
-    return res.status(200).json({
-      success: true,
-      status: isHealthy ? 'healthy' : 'unhealthy',
-      message: 'AI service is operational',
-      timestamp: new Date().toISOString(),
-    })
-  } catch {
-    return res.status(200).json({
-      success: false,
-      status: 'unhealthy',
-      message: 'AI service is temporarily unavailable',
-    })
-  }
-})
-
-// ======================== ROOT ENDPOINT ========================
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'PLU Backend LIVE - Uganda', 
-    db: 'Connected',
-    version: '1.0.0'
-  })
-})
-
-// ======================== 404 HANDLER (FIXED FOR RENDER) ========================
-app.all('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found',
-    path: req.originalUrl
-  })
-})
-
-// ======================== SERVER START ========================
-const startServer = async () => {
-  try {
-    await sequelize.authenticate()
-    console.log('Database connected')
-    
-    await sequelize.sync({ alter: true })
-    
-    const PORT = process.env.PORT || 3000
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`)
-    })
+    if (response.ok) {
+      res.json({ status: 'connected', model: 'gemini-2.0-flash' })
+    } else {
+      res.status(response.status).json({ error: 'Connection failed', status: response.status })
+    }
   } catch (error) {
-    console.error('Failed to start server:', error)
-    process.exit(1)
+    res.status(500).json({ error: 'Test failed', details: (error as Error).message })
   }
-}
+})
 
-startServer()
+app.get('/', (req, res) => {
+  res.json({ message: 'PLU Backend LIVE - Uganda', db: 'Connected' })
+})
+
+sequelize.sync({ alter: true }).then(() => {
+  console.log('Database connected & synced')
+  const PORT = process.env.PORT || 3000
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`)
+  })
+})
 
 export default app
