@@ -35,6 +35,10 @@
 
 
 
+
+
+
+
 import dotenv from 'dotenv'
 dotenv.config()
 
@@ -55,13 +59,13 @@ app.use('/api/user', userRoutes)
 app.use('/api/likes', likesRoutes)
 app.use('/api/posts', postsRoutes)     
 
-// AI Configuration (loaded from .env)
+// AI Configuration (minimal, from .env)
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 if (!GEMINI_API_KEY) {
-  console.error('❌ GEMINI_API_KEY missing from .env – AI routes disabled')
+  console.error('❌ GEMINI_API_KEY missing from .env – AI endpoint disabled')
 }
 
-// PLU system prompt
+// PLU system prompt (concise)
 const SYSTEM_PROMPT = `You are M.K AI, the official AI assistant for the Patriots League of Uganda (PLU).
 
 IMPORTANT PLU INFORMATION:
@@ -90,10 +94,9 @@ const getGeminiResponse = async (userMessage: string): Promise<string> => {
 
   console.log('🔄 Getting response from Gemini...')
 
-  // Try different models in order (updated for 2025 stability)
   const modelsToTry = [
     'gemini-2.0-flash',  // Fastest, free tier
-    'gemini-2.5-flash',  // Newer if available
+    'gemini-2.5-flash',  // Newer
     'gemini-1.5-flash',  // Fallback
   ]
 
@@ -157,7 +160,6 @@ const getGeminiResponse = async (userMessage: string): Promise<string> => {
           const text = data.candidates[0].content.parts[0]?.text?.trim()
 
           if (text && text.length > 5) {
-            // Log token usage if available
             if (data.usageMetadata) {
               console.log(`Tokens used: ${data.usageMetadata.promptTokenCount + data.usageMetadata.candidatesTokenCount}`)
             }
@@ -170,7 +172,7 @@ const getGeminiResponse = async (userMessage: string): Promise<string> => {
         lastError = new Error(`Model ${modelName}: ${response.status} - ${errorText}`)
       }
 
-      // Exponential backoff between attempts (1s, 2s, 4s)
+      // Backoff (1s, 2s, 4s)
       if (attempt < modelsToTry.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
       }
@@ -180,12 +182,10 @@ const getGeminiResponse = async (userMessage: string): Promise<string> => {
     }
   }
 
-  // If all fail, throw the last error
   throw lastError || new Error('All Gemini models failed')
 }
 
-// AI Routes (inline, no separate file)
-// POST /api/ai/chat
+// Minimal AI endpoint: POST /api/ai/chat { message: string } -> { response: string }
 app.post('/api/ai/chat', async (req, res) => {
   const { message } = req.body
 
@@ -205,35 +205,6 @@ app.post('/api/ai/chat', async (req, res) => {
   }
 })
 
-// Optional: GET /api/ai/test for connection check
-app.get('/api/ai/test', async (req, res) => {
-  if (!GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'API key not configured' })
-  }
-
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: 'Hello' }] }],
-          generationConfig: { maxOutputTokens: 10 },
-        }),
-      }
-    )
-
-    if (response.ok) {
-      res.json({ status: 'connected', model: 'gemini-2.0-flash' })
-    } else {
-      res.status(response.status).json({ error: 'Connection failed', status: response.status })
-    }
-  } catch (error) {
-    res.status(500).json({ error: 'Test failed', details: (error as Error).message })
-  }
-})
-
 app.get('/', (req, res) => {
   res.json({ message: 'PLU Backend LIVE - Uganda', db: 'Connected' })
 })
@@ -242,7 +213,7 @@ sequelize.sync({ alter: true }).then(() => {
   console.log('Database connected & synced')
   const PORT = process.env.PORT || 3000
   app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`)
+    console.log(`Server running on ${PORT}`)
   })
 })
 
