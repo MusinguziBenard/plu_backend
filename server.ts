@@ -37,6 +37,45 @@
 
 
 
+// import dotenv from 'dotenv'
+// dotenv.config()
+
+// import express from 'express'
+// import cors from 'cors'
+// import sequelize from './config/sequelize'
+// import authRoutes from './routes/auth'
+// import userRoutes from './routes/user'
+// import likesRoutes from './routes/likes'
+// import postsRoutes from './routes/posts'   
+
+// const app = express()
+// app.use(cors())
+// app.use(express.json())
+
+// app.use('/api/auth', authRoutes)
+// app.use('/api/user', userRoutes)
+// app.use('/api/likes', likesRoutes)
+// app.use('/api/posts', postsRoutes)     
+
+// app.get('/', (req, res) => {
+//   res.json({ message: 'PLU Backend LIVE - Uganda', db: 'Connected' })
+// })
+
+// sequelize.sync({ alter: true }).then(() => {
+//   console.log('Database connected & synced')
+//   const PORT = process.env.PORT || 3000
+//   app.listen(PORT, () => {
+//     console.log(`Server running on http://localhost:${PORT}`)
+//   })
+// })
+
+// export default app
+
+
+
+
+
+
 
 import dotenv from 'dotenv'
 dotenv.config()
@@ -205,50 +244,52 @@ const getGeminiResponse = async (userMessage: string): Promise<string> => {
 // Grok API fallback (OpenAI-compatible)
 const getGrokResponse = async (userMessage: string): Promise<string> => {
   if (!GROK_API_KEY) {
-    throw new Error('GROK_API_KEY not configured. See https://x.ai/api for setup.')
+    throw new Error('GROK_API_KEY not configured')
   }
 
-  console.log('🔄 Falling back to Grok API...')
+  console.log('🔄 Falling back to Grok API (Responses API)...')
 
   try {
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    const response = await fetch('https://api.x.ai/v1/responses', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${GROK_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'grok-beta',  // Or 'grok-4' if available; check https://x.ai/api for latest
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userMessage }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000,
+        model: 'grok-4-1-fast-reasoning',
+        input: [
+          {
+            role: 'system',
+            content: SYSTEM_PROMPT
+          },
+          {
+            role: 'user',
+            content: userMessage
+          }
+        ]
       }),
     })
 
     console.log('Grok response status:', response.status)
 
-    if (response.ok) {
-      const data = await response.json()
-      console.log('✅ Success with Grok')
-      const text = data.choices?.[0]?.message?.content?.trim()
-      if (text && text.length > 5) {
-        return text
-      } else {
-        throw new Error('Grok: Invalid or short response')
-      }
-    } else {
+    if (!response.ok) {
       const errorText = await response.text()
-      console.error('Grok failed:', response.status, errorText)
       throw new Error(`Grok: ${response.status} - ${errorText}`)
     }
+
+    const data = await response.json()
+
+    console.log('✅ Success with Grok')
+
+    return data.output?.[0]?.content?.[0]?.text || 'No response generated'
+
   } catch (error) {
     console.error('Grok API error:', error)
     throw error
   }
 }
+
 
 // DeepSeek API fallback (OpenAI-compatible)
 const getDeepSeekResponse = async (userMessage: string): Promise<string> => {
