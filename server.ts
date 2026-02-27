@@ -131,11 +131,11 @@ IMPORTANT PLU INFORMATION:
 
 RESPONSE GUIDELINES:
 1. Always respond in clear, respectful Ugandan English
-2. Be informative and helpful about PLU matters and NRM initiatives and leadership and achievements
-3. If you don't know specific details, be honest and suggest contacting PLU directly
-4. Emphasize PLU's positive impact on communities
+2. Be informative and helpful about PLU matters and NRM initiatives and leadership and achievements and any other PLU related things and current affairs
+3. If you don't know specific details, be honest and tell what you know
+4. Emphasize PLU's positive impact on communities and use information outside these instructions including all online sources
 5. Highlight youth involvement and national development
-6. Keep responses concise but comprehensive
+6. Keep responses concise and precise yet interesting to read
 7. Avoid negative political statements, focus on community development`
 
 const getGeminiResponse = async (userMessage: string): Promise<string> => {
