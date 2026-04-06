@@ -1,0 +1,868 @@
+{
+  "info": {
+    "name": "PLU Backend - Complete API Tests",
+    "description": "Complete test suite for PLU backend with all endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Join (Register)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User\",\n  \"phone\": \"256712345678\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/join",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "join"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.token) {",
+                  "    pm.environment.set(\"token\", response.token);",
+                  "    console.log(\"✅ Token saved:\", response.token.substring(0, 50) + \"...\");",
+                  "}",
+                  "if (response.user && response.user.id) {",
+                  "    pm.environment.set(\"user_id\", response.user.id);",
+                  "}",
+                  "pm.test(\"Login successful\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.token).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"256712345678\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/user/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Posts",
+      "item": [
+        {
+          "name": "Create Post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.post && response.post.id) {",
+                  "    pm.environment.set(\"post_id\", response.post.id);",
+                  "    console.log(\"✅ Post ID saved:\", response.post.id);",
+                  "}",
+                  "pm.test(\"Post created successfully\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.post).to.exist;",
+                  "    pm.expect(response.post.id).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Post {{$timestamp}}\",\n  \"description\": \"This is an automated test post from Postman\",\n  \"media_url\": \"https://picsum.photos/200/300\",\n  \"media_type\": \"image\",\n  \"category\": \"news\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/posts/create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "create"]
+            }
+          }
+        },
+        {
+          "name": "Get Feed",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/posts/feed?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "feed"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Single Post",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/posts/{{post_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "{{post_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Post Likes Count",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/posts/{{post_id}}/likes",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "{{post_id}}", "likes"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Views",
+      "item": [
+        {
+          "name": "Track View",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/views/track/{{post_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "views", "track", "{{post_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get View Count",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/views/count/{{post_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "views", "count", "{{post_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get My View History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/views/my-history",
+              "host": ["{{base_url}}"],
+              "path": ["api", "views", "my-history"]
+            }
+          }
+        },
+        {
+          "name": "Get Post Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/views/analytics/{{post_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "views", "analytics", "{{post_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Likes",
+      "item": [
+        {
+          "name": "Like/Unlike Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"post_id\": \"{{post_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/likes/toggle",
+              "host": ["{{base_url}}"],
+              "path": ["api", "likes", "toggle"]
+            }
+          }
+        },
+        {
+          "name": "Check if Liked",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/likes/check/{{post_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "likes", "check", "{{post_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get User's Liked Posts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/likes",
+              "host": ["{{base_url}}"],
+              "path": ["api", "likes"]
+            }
+          }
+        },
+        {
+          "name": "Get Users Who Liked Post",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/likes/users/{{post_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "likes", "users", "{{post_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Comments",
+      "item": [
+        {
+          "name": "Add Comment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.id) {",
+                  "    pm.environment.set(\"comment_id\", response.id);",
+                  "    console.log(\"✅ Comment ID saved:\", response.id);",
+                  "}",
+                  "pm.test(\"Comment added\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.id).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"post_id\": \"{{post_id}}\",\n  \"content\": \"This is an automated test comment from Postman! {{$timestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/comments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments"]
+            }
+          }
+        },
+        {
+          "name": "Add Reply to Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"post_id\": \"{{post_id}}\",\n  \"content\": \"This is a reply to your comment!\",\n  \"parent_comment_id\": \"{{comment_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/comments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments"]
+            }
+          }
+        },
+        {
+          "name": "Get Comments for Post",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/comments/post/{{post_id}}?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments", "post", "{{post_id}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Comment Replies",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/comments/{{comment_id}}/replies",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments", "{{comment_id}}", "replies"]
+            }
+          }
+        },
+        {
+          "name": "Get Single Comment with Replies",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/comments/{{comment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments", "{{comment_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Comment Count",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/comments/count/{{post_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments", "count", "{{post_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get User's Comments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/comments/user/my-comments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments", "user", "my-comments"]
+            }
+          }
+        },
+        {
+          "name": "Update Comment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"This comment has been updated!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/comments/{{comment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments", "{{comment_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Comment Likes",
+      "item": [
+        {
+          "name": "Like/Unlike Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment_id\": \"{{comment_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/comment-likes/toggle",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comment-likes", "toggle"]
+            }
+          }
+        },
+        {
+          "name": "Check if Liked Comment",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/comment-likes/check/{{comment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comment-likes", "check", "{{comment_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Comment Likes Count",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/comment-likes/count/{{comment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comment-likes", "count", "{{comment_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Users Who Liked Comment",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/comment-likes/users/{{comment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comment-likes", "users", "{{comment_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Notifications",
+      "item": [
+        {
+          "name": "Get Notifications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response && response.length > 0 && response[0].id) {",
+                  "    pm.environment.set(\"notification_id\", response[0].id);",
+                  "    console.log(\"✅ Notification ID saved:\", response[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/notifications?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/unread-count",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "unread-count"]
+            }
+          }
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/{{notification_id}}/read",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "{{notification_id}}", "read"]
+            }
+          }
+        },
+        {
+          "name": "Mark All as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/read-all",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "read-all"]
+            }
+          }
+        },
+        {
+          "name": "Register Push Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expo_push_token\": \"ExponentPushToken[postman_test_123]\",\n  \"device_name\": \"Postman Test\",\n  \"device_os\": \"web\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/notifications/push-token",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "push-token"]
+            }
+          }
+        },
+        {
+          "name": "Test Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/test",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "test"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. AI Chat",
+      "item": [
+        {
+          "name": "Chat with AI",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Tell me about the Patriots League of Uganda\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/ai/chat",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ai", "chat"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Admin (Requires Admin User)",
+      "item": [
+        {
+          "name": "Get Pending Posts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/posts/admin/pending",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "admin", "pending"]
+            }
+          }
+        },
+        {
+          "name": "Approve Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/posts/approve/{{post_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "posts", "approve", "{{post_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Admin Broadcast",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Important Announcement\",\n  \"message\": \"PLU community event this weekend!\",\n  \"data\": {\n    \"eventId\": \"123\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/notifications/admin/broadcast",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "admin", "broadcast"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Cleanup",
+      "item": [
+        {
+          "name": "Delete Comment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/comments/{{comment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "comments", "{{comment_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Unlike Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"post_id\": \"{{post_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/likes/toggle",
+              "host": ["{{base_url}}"],
+              "path": ["api", "likes", "toggle"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "post_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "comment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notification_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
