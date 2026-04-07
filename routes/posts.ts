@@ -29,6 +29,30 @@ router.get('/feed', async (req, res) => {
   res.json(posts)
 })
 
+// Add this after your existing routes, before the protectedRouter
+router.get('/:id/poll', async (req, res) => {
+  try {
+    const postId = req.params.id
+    const Poll = require('../models/Poll').Poll
+    const PollOption = require('../models/PollOption').PollOption
+    
+    const poll = await Poll.findOne({
+      where: { post_id: postId, is_active: true },
+      include: [{ model: PollOption }]
+    })
+    
+    if (!poll) {
+      return res.json({ hasPoll: false })
+    }
+    
+    res.json({ hasPoll: true, poll })
+  } catch (error) {
+    console.error('Error fetching poll:', error)
+    res.status(500).json({ error: 'Failed to fetch poll' })
+  }
+})
+
+
 router.get('/:id', async (req, res) => {
   const post = await Post.findByPk(req.params.id, {
     include: [{ 
