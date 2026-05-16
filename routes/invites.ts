@@ -140,8 +140,8 @@
 
 // export default router
 
-// routes/invites.ts - WITH SOCKET.IO INTEGRATION
-import { Router, Request, Response } from 'express'
+// routes/invites.ts - ORIGINAL CODE + SOCKET.IO ONLY
+import { Router } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { Invite } from '../models/Invite'
 import { User } from '../models/User'
@@ -152,8 +152,7 @@ import pushService from '../services/expoPushNotification'
 const router = Router()
 router.use(requireAuth)
 
-// Send invite
-router.post('/send', async (req: any, res: Response) => {
+router.post('/send', async (req, res) => {
   try {
     const inviterId = req.user.id
     const { invitee_id, type, reference_id } = req.body
@@ -198,10 +197,9 @@ router.post('/send', async (req: any, res: Response) => {
       { inviteId: invite.id, type: 'invite', referenceId: reference_id }
     )
 
-    // ✅ SOCKET.IO - Emit invite events
+    // ✅ SOCKET.IO - Emit new invite
     const io = req.app.get('io')
     if (io) {
-      // Notify invitee
       io.to(`user:${invitee_id}`).emit('new_invite', {
         inviteId: invite.id,
         inviterId,
@@ -213,32 +211,12 @@ router.post('/send', async (req: any, res: Response) => {
         status: 'pending',
         timestamp: Date.now()
       })
-
-      io.to(`notifications:${invitee_id}`).emit('new_notification', {
-        type: 'invite',
-        title: 'New Invitation',
-        message: `${inviter?.name || 'Someone'} invited you to ${type}: ${referenceName}`,
-        inviteId: invite.id,
-        timestamp: Date.now()
-      })
-
-      // Confirm to sender
       io.to(`user:${inviterId}`).emit('invite_sent', {
         inviteId: invite.id,
         inviteeId: invitee_id,
         message: 'Invite sent successfully',
         timestamp: Date.now()
       })
-
-      // If event invite, notify event room
-      if (type === 'event') {
-        io.to(`event:${reference_id}`).emit('user_invited_to_event', {
-          eventId: reference_id,
-          inviteeId: invitee_id,
-          inviterId,
-          timestamp: Date.now()
-        })
-      }
     }
 
     res.status(201).json(invite)
@@ -248,8 +226,7 @@ router.post('/send', async (req: any, res: Response) => {
   }
 })
 
-// Get my invites
-router.get('/my-invites', async (req: any, res: Response) => {
+router.get('/my-invites', async (req, res) => {
   try {
     const userId = req.user.id
     const { status = 'pending' } = req.query
@@ -284,8 +261,7 @@ router.get('/my-invites', async (req: any, res: Response) => {
   }
 })
 
-// Get sent invites
-router.get('/sent', async (req: any, res: Response) => {
+router.get('/sent', async (req, res) => {
   try {
     const userId = req.user.id
     const invites = await Invite.findAll({
@@ -302,8 +278,7 @@ router.get('/sent', async (req: any, res: Response) => {
   }
 })
 
-// Respond to invite
-router.patch('/:inviteId/respond', async (req: any, res: Response) => {
+router.patch('/:inviteId/respond', async (req, res) => {
   try {
     const userId = req.user.id
     const { inviteId } = req.params
@@ -321,100 +296,28 @@ router.patch('/:inviteId/respond', async (req: any, res: Response) => {
     invite.status = action === 'accept' ? 'accepted' : 'rejected'
     await invite.save()
 
-    // Get reference name for notification
-    let referenceName = ''
-    if (invite.type === 'event') {
-      const event = await LiveEvent.findByPk(invite.reference_id)
-      referenceName = event?.title || ''
-    } else if (invite.type === 'post') {
-      const post = await Post.findByPk(invite.reference_id)
-      referenceName = post?.title || ''
-    }
-
-    // ✅ SOCKET.IO - Emit response events
+    // ✅ SOCKET.IO - Emit invite response
     const io = req.app.get('io')
     if (io) {
-      // Notify inviter
       io.to(`user:${invite.inviter_id}`).emit('invite_response', {
         inviteId,
         inviteeId: userId,
         action,
         status: invite.status,
-        referenceName,
-        message: `Your invite was ${invite.status}`,
         timestamp: Date.now()
       })
-
-      io.to(`notifications:${invite.inviter_id}`).emit('new_notification', {
-        type: 'invite_response',
-        title: `Invite ${invite.status}`,
-        message: `Someone ${invite.status} your invite to ${invite.type}: ${referenceName}`,
-        inviteId,
-        timestamp: Date.now()
-      })
-
-      // Confirm to responder
       io.to(`user:${userId}`).emit('invite_response_sent', {
         inviteId,
         action,
         status: invite.status,
-        message: `You ${invite.status} the invite`,
         timestamp: Date.now()
       })
-
-      // If accepted event invite, notify event room
-      if (invite.type === 'event' && action === 'accept') {
-        io.to(`event:${invite.reference_id}`).emit('user_accepted_event_invite', {
-          eventId: invite.reference_id,
-          userId,
-          timestamp: Date.now()
-        })
-      }
     }
 
     res.json({ success: true, status: invite.status })
   } catch (error) {
     console.error('Respond to invite error:', error)
     res.status(500).json({ error: 'Failed to respond to invite' })
-  }
-})
-
-// Cancel sent invite
-router.delete('/:inviteId/cancel', async (req: any, res: Response) => {
-  try {
-    const userId = req.user.id
-    const { inviteId } = req.params
-
-    const invite = await Invite.findByPk(inviteId)
-    if (!invite) {
-      return res.status(404).json({ error: 'Invite not found' })
-    }
-
-    if (invite.inviter_id !== userId) {
-      return res.status(403).json({ error: 'Unauthorized' })
-    }
-
-    if (invite.status !== 'pending') {
-      return res.status(400).json({ error: 'Can only cancel pending invites' })
-    }
-
-    const inviteeId = invite.invitee_id
-    await invite.destroy()
-
-    // ✅ SOCKET.IO - Notify invitee
-    const io = req.app.get('io')
-    if (io) {
-      io.to(`user:${inviteeId}`).emit('invite_cancelled', {
-        inviteId,
-        cancelledBy: userId,
-        timestamp: Date.now()
-      })
-    }
-
-    res.json({ success: true, message: 'Invite cancelled' })
-  } catch (error) {
-    console.error('Cancel invite error:', error)
-    res.status(500).json({ error: 'Failed to cancel invite' })
   }
 })
 

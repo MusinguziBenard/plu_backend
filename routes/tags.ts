@@ -117,6 +117,7 @@
 
 // export default router
 
+// routes/tags.ts - ORIGINAL CODE + SOCKET.IO ONLY
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { Tag } from '../models/Tag'
@@ -125,24 +126,6 @@ import { Post } from '../models/Post'
 import pushService from '../services/expoPushNotification'
 
 const router = Router()
-
-// Type definitions for socket events
-interface TagCreatedData {
-  tagId: string;
-  postId: string;
-  taggerId: string;
-  taggedUserId: string;
-  taggerName: string;
-  postTitle: string;
-  timestamp: number;
-}
-
-interface TagRemovedData {
-  tagId: string;
-  postId: string;
-  removedBy: string;
-  timestamp: number;
-}
 
 // PUBLIC ROUTES
 router.get('/post/:postId', async (req, res) => {
@@ -168,8 +151,8 @@ protectedRouter.use(requireAuth)
 
 protectedRouter.post('/tag', async (req, res) => {
   try {
-    const taggerId: string = req.user.id
-    const { tagged_id, post_id }: { tagged_id: string; post_id: string } = req.body
+    const taggerId = req.user.id
+    const { tagged_id, post_id } = req.body
 
     if (taggerId === tagged_id) {
       return res.status(400).json({ error: 'Cannot tag yourself' })
@@ -190,58 +173,37 @@ protectedRouter.post('/tag', async (req, res) => {
       notified: false
     })
 
-    const tagger: User | null = await User.findByPk(taggerId)
-    const post: Post | null = await Post.findByPk(post_id)
+    const tagger = await User.findByPk(taggerId)
+    const post = await Post.findByPk(post_id)
     
-    // Get tagged user for notification
-    const taggedUser: User | null = await User.findByPk(tagged_id)
-    
-    // Send push notification
     await pushService.createAndSend(
       tagged_id,
       'comment',
       tag.id,
       'You were tagged!',
-      `${tagger?.name || 'Someone'} tagged you in a post: "${post?.title?.substring(0, 50) || 'a post'}"`,
+      `${tagger?.name} tagged you in a post: "${post?.title?.substring(0, 50) || 'a post'}"`,
       post?.photo_url || undefined,
       { postId: post_id, tagId: tag.id, type: 'tag' }
     )
 
-    // Socket.IO - Emit real-time tag events
+    // ✅ SOCKET.IO - Emit tag event
     const io = req.app.get('io')
-    
-    const tagData: TagCreatedData = {
-      tagId: tag.id,
-      postId: post_id,
-      taggerId,
-      taggedUserId: tagged_id,
-      taggerName: tagger?.name || 'Someone',
-      postTitle: post?.title || 'a post',
-      timestamp: Date.now()
+    if (io) {
+      io.to(`post:${post_id}`).emit('user_tagged', {
+        tagId: tag.id,
+        postId: post_id,
+        taggerId,
+        taggedUserId: tagged_id,
+        taggerName: tagger?.name || 'Someone',
+        timestamp: Date.now()
+      })
+      io.to(`user:${tagged_id}`).emit('tagged_in_post', {
+        tagId: tag.id,
+        postId: post_id,
+        taggerName: tagger?.name || 'Someone',
+        timestamp: Date.now()
+      })
     }
-    
-    // Emit to the post room so everyone viewing the post sees the tag
-    io.to(`post:${post_id}`).emit('user_tagged', tagData)
-    
-    // Emit to the tagged user's personal notification room
-    io.to(`notifications:${tagged_id}`).emit('new_notification', {
-      type: 'tag',
-      tagId: tag.id,
-      postId: post_id,
-      taggerName: tagger?.name || 'Someone',
-      message: `${tagger?.name || 'Someone'} tagged you in a post`,
-      timestamp: Date.now()
-    })
-    
-    // Emit to the tagged user's personal room for real-time updates
-    io.to(`user:${tagged_id}`).emit('tagged_in_post', tagData)
-    
-    // General notification for anyone subscribed to the post
-    io.to(`post:${post_id}`).emit('post_updated', {
-      postId: post_id,
-      type: 'tag_added',
-      timestamp: Date.now()
-    })
 
     res.status(201).json(tag)
   } catch (error) {
@@ -252,7 +214,7 @@ protectedRouter.post('/tag', async (req, res) => {
 
 protectedRouter.get('/my-tags', async (req, res) => {
   try {
-    const userId: string = req.user.id
+    const userId = req.user.id
     const tags = await Tag.findAll({
       where: { tagged_id: userId },
       include: [
@@ -270,15 +232,10 @@ protectedRouter.get('/my-tags', async (req, res) => {
 
 protectedRouter.delete('/:tagId', async (req, res) => {
   try {
-    const userId: string = req.user.id
+    const userId = req.user.id
     const { tagId } = req.params
 
-    const tag = await Tag.findByPk(tagId, {
-      include: [
-        { model: User, as: 'tagged', attributes: ['id', 'name'] }
-      ]
-    })
-    
+    const tag = await Tag.findByPk(tagId)
     if (!tag) {
       return res.status(404).json({ error: 'Tag not found' })
     }
@@ -287,61 +244,30 @@ protectedRouter.delete('/:tagId', async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' })
     }
 
-    const postId: string = tag.post_id
-    const taggedUserId: string = tag.tagged_id
-    
+    const postId = tag.post_id
+    const taggedUserId = tag.tagged_id
     await tag.destroy()
 
-    // Socket.IO - Emit tag removal events
+    // ✅ SOCKET.IO - Emit tag removed
     const io = req.app.get('io')
-    
-    const tagRemovedData: TagRemovedData = {
-      tagId,
-      postId,
-      removedBy: userId,
-      timestamp: Date.now()
+    if (io) {
+      io.to(`post:${postId}`).emit('tag_removed', {
+        tagId,
+        postId,
+        removedBy: userId,
+        timestamp: Date.now()
+      })
+      io.to(`user:${taggedUserId}`).emit('tag_removed', {
+        tagId,
+        postId,
+        timestamp: Date.now()
+      })
     }
-    
-    // Emit to the post room
-    io.to(`post:${postId}`).emit('tag_removed', tagRemovedData)
-    
-    // Emit to the tagged user's personal room
-    io.to(`user:${taggedUserId}`).emit('tag_removed_from_post', {
-      ...tagRemovedData,
-      message: 'A tag was removed from a post'
-    })
-    
-    // Notify about post update
-    io.to(`post:${postId}`).emit('post_updated', {
-      postId,
-      type: 'tag_removed',
-      tagId,
-      timestamp: Date.now()
-    })
 
     res.json({ success: true })
   } catch (error) {
     console.error('Remove tag error:', error)
     res.status(500).json({ error: 'Failed to remove tag' })
-  }
-})
-
-// Get users who tagged a specific post (for real-time tracking)
-protectedRouter.get('/post/:postId/taggers', async (req, res) => {
-  try {
-    const { postId } = req.params
-    const tags = await Tag.findAll({
-      where: { post_id: postId },
-      include: [
-        { model: User, as: 'tagger', attributes: ['id', 'name', 'avatar_url'] }
-      ],
-      attributes: ['id', 'tagged_id', 'created_at']
-    })
-    
-    res.json(tags)
-  } catch (error) {
-    console.error('Get taggers error:', error)
-    res.status(500).json({ error: 'Failed to get taggers' })
   }
 })
 

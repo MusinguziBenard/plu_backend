@@ -392,8 +392,8 @@
 
 // export default router
 
-// routes/comments.ts - COMPLETE WITH SOCKET.IO INTEGRATION
-import { Router, Request, Response } from 'express'
+// routes/comments.ts - ORIGINAL CODE + SOCKET.IO ONLY
+import { Router } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { Comment } from '../models/Comment'
 import { CommentLike } from '../models/CommentLike'
@@ -403,65 +403,13 @@ import pushService from '../services/expoPushNotification'
 
 const router = Router()
 
-// Type definitions for socket events
-interface CommentCreatedData {
-  commentId: string;
-  postId: string;
-  userId: string;
-  content: string;
-  parentCommentId: string | null;
-  user?: {
-    id: string;
-    name: string;
-    avatar_url: string | null;
-  };
-  timestamp: number;
-}
-
-interface CommentUpdatedData {
-  commentId: string;
-  postId: string;
-  userId: string;
-  content: string;
-  timestamp: number;
-}
-
-interface CommentDeletedData {
-  commentId: string;
-  postId: string;
-  parentCommentId: string | null;
-  deletedBy: string;
-  timestamp: number;
-}
-
-interface CommentLikeToggledData {
-  commentId: string;
-  postId: string;
-  userId: string;
-  action: 'liked' | 'unliked';
-  isLiked: boolean;
-  likesCount: number;
-  timestamp: number;
-}
-
-// Extended Request interface for authenticated requests
-interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    name?: string;
-    role?: string;
-    user_metadata?: {
-      role?: string;
-    };
-  };
-}
-
-// Helper functions
+// Helper function to safely get string from params/query
 const getString = (value: any): string => {
   if (!value) return ''
   return Array.isArray(value) ? value[0] : String(value)
 }
 
+// Helper function to safely get number from query parameter
 const getNumber = (value: any, defaultValue: number): number => {
   if (!value) return defaultValue
   const str = Array.isArray(value) ? value[0] : value
@@ -469,23 +417,18 @@ const getNumber = (value: any, defaultValue: number): number => {
   return isNaN(num) ? defaultValue : num
 }
 
-const isAdmin = (req: AuthRequest): boolean => {
-  if (!req.user) return false
-  return req.user.role === 'admin' || req.user.user_metadata?.role === 'admin'
-}
-
 // ============================================
 // PUBLIC ROUTES (No authentication required)
 // ============================================
 
 // Get comments for a post (top-level comments only)
-router.get('/post/:postId', async (req: Request, res: Response) => {
+router.get('/post/:postId', async (req, res) => {
   try {
-    const postId: string = getString(req.params.postId)
-    const page: number = getNumber(req.query.page, 1)
-    const limit: number = getNumber(req.query.limit, 20)
+    const postId = getString(req.params.postId)
+    const page = getNumber(req.query.page, 1)
+    const limit = getNumber(req.query.limit, 20)
 
-    const { count, rows: comments } = await Comment.findAndCountAll({
+    const comments = await Comment.findAll({
       where: { 
         post_id: postId,
         parent_comment_id: null
@@ -495,62 +438,46 @@ router.get('/post/:postId', async (req: Request, res: Response) => {
         attributes: ['id', 'name', 'avatar_url'] 
       }],
       order: [['created_at', 'DESC']],
-      limit,
+      limit: limit,
       offset: (page - 1) * limit
     })
 
-    return res.json({
-      comments,
-      pagination: {
-        page,
-        limit,
-        total: count,
-        totalPages: Math.ceil(count / limit)
-      }
-    })
+    res.json(comments)
   } catch (error) {
     console.error('Error fetching comments:', error)
-    return res.status(500).json({ error: 'Failed to fetch comments' })
+    res.status(500).json({ error: 'Failed to fetch comments' })
   }
 })
 
 // Get replies for a specific comment
-router.get('/:commentId/replies', async (req: Request, res: Response) => {
+router.get('/:commentId/replies', async (req, res) => {
   try {
-    const commentId: string = getString(req.params.commentId)
-    const page: number = getNumber(req.query.page, 1)
-    const limit: number = getNumber(req.query.limit, 20)
+    const commentId = getString(req.params.commentId)
+    const page = getNumber(req.query.page, 1)
+    const limit = getNumber(req.query.limit, 20)
 
-    const { count, rows: replies } = await Comment.findAndCountAll({
+    const replies = await Comment.findAll({
       where: { parent_comment_id: commentId },
       include: [{ 
         model: User, 
         attributes: ['id', 'name', 'avatar_url'] 
       }],
       order: [['created_at', 'ASC']],
-      limit,
+      limit: limit,
       offset: (page - 1) * limit
     })
 
-    return res.json({
-      replies,
-      pagination: {
-        page,
-        limit,
-        total: count,
-        totalPages: Math.ceil(count / limit)
-      }
-    })
+    res.json(replies)
   } catch (error) {
     console.error('Error fetching replies:', error)
-    return res.status(500).json({ error: 'Failed to fetch replies' })
+    res.status(500).json({ error: 'Failed to fetch replies' })
   }
 })
 
 // Get single comment with its replies
-router.get('/:commentId', async (req: Request, res: Response) => {
+router.get('/:commentId', async (req, res) => {
   try {
-    const commentId: string = getString(req.params.commentId)
+    const commentId = getString(req.params.commentId)
 
     const comment = await Comment.findByPk(commentId, {
       include: [
@@ -569,24 +496,24 @@ router.get('/:commentId', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Comment not found' })
     }
 
-    return res.json(comment)
+    res.json(comment)
   } catch (error) {
     console.error('Error fetching comment:', error)
-    return res.status(500).json({ error: 'Failed to fetch comment' })
+    res.status(500).json({ error: 'Failed to fetch comment' })
   }
 })
 
 // Get comment count for a post
-router.get('/count/:postId', async (req: Request, res: Response) => {
+router.get('/count/:postId', async (req, res) => {
   try {
-    const postId: string = getString(req.params.postId)
-    const count: number = await Comment.count({
+    const postId = getString(req.params.postId)
+    const count = await Comment.count({
       where: { post_id: postId }
     })
-    return res.json({ postId, commentsCount: count })
+    res.json({ postId, commentsCount: count })
   } catch (error) {
     console.error('Error getting comment count:', error)
-    return res.status(500).json({ error: 'Failed to get comment count' })
+    res.status(500).json({ error: 'Failed to get comment count' })
   }
 })
 
@@ -595,18 +522,10 @@ router.get('/count/:postId', async (req: Request, res: Response) => {
 // ============================================
 
 // Add comment or reply
-router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
-
-    const userId: string = req.user.id
-    const { post_id, content, parent_comment_id }: {
-      post_id: string;
-      content: string;
-      parent_comment_id?: string;
-    } = req.body
+    const userId = req.user.id
+    const { post_id, content, parent_comment_id } = req.body
 
     if (!post_id || !content) {
       return res.status(400).json({ error: 'Post ID and content required' })
@@ -641,7 +560,6 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
       attributes: ['id', 'name', 'avatar_url']
     })
 
-    // Send push notifications
     if (parent_comment_id) {
       const parentComment = await Comment.findByPk(parent_comment_id, {
         include: [{ model: User, attributes: ['id', 'name'] }]
@@ -653,7 +571,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
           'comment_reply',
           parent_comment_id,
           'Someone replied to your comment',
-          `${commenter?.name || 'Someone'} replied: "${content.substring(0, 50)}"`,
+          `${commenter?.name} replied: "${content.substring(0, 50)}"`,
           post.photo_url || undefined,
           { 
             postId: post_id, 
@@ -670,7 +588,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
           'comment',
           post_id,
           'New comment on your post',
-          `${commenter?.name || 'Someone'}: "${content.substring(0, 50)}"`,
+          `${commenter?.name}: "${content.substring(0, 50)}"`,
           post.photo_url || undefined,
           { 
             postId: post_id, 
@@ -681,53 +599,23 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // ✅ SOCKET.IO - Emit comment created events
+    // ✅ SOCKET.IO - Emit comment events
     const io = req.app.get('io')
     if (io) {
-      const commentData: CommentCreatedData = {
+      const commentData = {
         commentId: comment.id,
         postId: post_id,
         userId,
         content,
         parentCommentId: parent_comment_id || null,
-        user: commenter ? {
-          id: commenter.id,
-          name: commenter.name || 'Unknown',
-          avatar_url: commenter.avatar_url || null
-        } : undefined,
+        user: commenter ? { id: commenter.id, name: commenter.name, avatar_url: commenter.avatar_url } : null,
         timestamp: Date.now()
       }
 
-      // Emit to post room
       if (parent_comment_id) {
         io.to(`post:${post_id}`).emit('comment_reply_added', commentData)
       } else {
         io.to(`post:${post_id}`).emit('new_comment', commentData)
-      }
-
-      // Notify post owner if it's a top-level comment
-      if (!parent_comment_id && post.user_id !== userId) {
-        io.to(`notifications:${post.user_id}`).emit('new_notification', {
-          type: 'comment',
-          title: 'New Comment',
-          message: `${commenter?.name || 'Someone'} commented on your post`,
-          ...commentData
-        })
-      }
-
-      // Notify parent comment owner if it's a reply
-      if (parent_comment_id) {
-        const parentComment = await Comment.findByPk(parent_comment_id, {
-          attributes: ['user_id']
-        })
-        if (parentComment && parentComment.user_id !== userId) {
-          io.to(`notifications:${parentComment.user_id}`).emit('new_notification', {
-            type: 'comment_reply',
-            title: 'New Reply',
-            message: `${commenter?.name || 'Someone'} replied to your comment`,
-            ...commentData
-          })
-        }
       }
     }
 
@@ -736,23 +624,20 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
       user: commenter
     }
 
-    return res.status(201).json(commentWithUser)
+    res.status(201).json(commentWithUser)
   } catch (error) {
     console.error('Error creating comment:', error)
-    return res.status(500).json({ error: 'Failed to create comment' })
+    res.status(500).json({ error: 'Failed to create comment' })
   }
 })
 
 // Update comment
-router.patch('/:commentId', requireAuth, async (req: AuthRequest, res: Response) => {
+router.patch('/:commentId', requireAuth, async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
-
-    const userId: string = req.user.id
-    const commentId: string = getString(req.params.commentId)
-    const { content }: { content: string } = req.body
+    const userId = req.user.id
+    const commentId = getString(req.params.commentId)
+    const { content } = req.body
+    const isAdmin = req.user.role === 'admin' || req.user.user_metadata?.role === 'admin'
 
     if (!content) {
       return res.status(400).json({ error: 'Content required' })
@@ -763,43 +648,25 @@ router.patch('/:commentId', requireAuth, async (req: AuthRequest, res: Response)
       return res.status(404).json({ error: 'Comment not found' })
     }
 
-    if (comment.user_id !== userId && !isAdmin(req)) {
+    if (comment.user_id !== userId && !isAdmin) {
       return res.status(403).json({ error: 'Unauthorized' })
     }
 
     comment.content = content
     await comment.save()
 
-    // ✅ SOCKET.IO - Emit comment updated event
-    const io = req.app.get('io')
-    if (io) {
-      const updateData: CommentUpdatedData = {
-        commentId,
-        postId: comment.post_id,
-        userId,
-        content,
-        timestamp: Date.now()
-      }
-
-      io.to(`post:${comment.post_id}`).emit('comment_updated', updateData)
-    }
-
-    return res.json({ success: true, comment })
+    res.json({ success: true, comment })
   } catch (error) {
     console.error('Error updating comment:', error)
-    return res.status(500).json({ error: 'Failed to update comment' })
+    res.status(500).json({ error: 'Failed to update comment' })
   }
 })
 
 // Like/unlike comment
-router.post('/like', requireAuth, async (req: AuthRequest, res: Response) => {
+router.post('/like', requireAuth, async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
-
-    const userId: string = req.user.id
-    const { comment_id }: { comment_id: string } = req.body
+    const userId = req.user.id
+    const { comment_id } = req.body
 
     if (!comment_id) {
       return res.status(400).json({ error: 'Comment ID required' })
@@ -809,21 +676,14 @@ router.post('/like', requireAuth, async (req: AuthRequest, res: Response) => {
       where: { user_id: userId, comment_id }
     })
 
-    let action: 'liked' | 'unliked'
-    let isLiked: boolean
-
     if (existing) {
       await existing.destroy()
       await Comment.decrement('likes_count', { where: { id: comment_id } })
-      action = 'unliked'
-      isLiked = false
+      res.json({ success: true, action: 'unliked', isLiked: false })
     } else {
       await CommentLike.create({ user_id: userId, comment_id })
       await Comment.increment('likes_count', { where: { id: comment_id } })
-      action = 'liked'
-      isLiked = true
       
-      // Send push notification
       const comment = await Comment.findByPk(comment_id, {
         include: [
           { model: User, attributes: ['id', 'name'] },
@@ -850,52 +710,23 @@ router.post('/like', requireAuth, async (req: AuthRequest, res: Response) => {
           }
         )
       }
+      
+      res.json({ success: true, action: 'liked', isLiked: true })
     }
-
-    // Get updated likes count
-    const updatedComment = await Comment.findByPk(comment_id, {
-      attributes: ['id', 'likes_count', 'post_id']
-    })
-
-    // ✅ SOCKET.IO - Emit comment like event
-    const io = req.app.get('io')
-    if (io && updatedComment) {
-      const likeData: CommentLikeToggledData = {
-        commentId: comment_id,
-        postId: updatedComment.post_id,
-        userId,
-        action,
-        isLiked,
-        likesCount: updatedComment.likes_count,
-        timestamp: Date.now()
-      }
-
-      io.to(`post:${updatedComment.post_id}`).emit('comment_like_toggled', likeData)
-    }
-
-    return res.json({ 
-      success: true, 
-      action, 
-      isLiked,
-      likesCount: updatedComment?.likes_count || 0
-    })
   } catch (error) {
     console.error('Error toggling comment like:', error)
-    return res.status(500).json({ error: 'Failed to toggle like' })
+    res.status(500).json({ error: 'Failed to toggle like' })
   }
 })
 
-// Delete comment (and all replies)
-router.delete('/:commentId', requireAuth, async (req: AuthRequest, res: Response) => {
+// Delete comment (and all replies) - FIXED
+router.delete('/:commentId', requireAuth, async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
+    const userId = req.user.id
+    const commentId = getString(req.params.commentId)
+    const isAdmin = req.user.role === 'admin' || req.user.user_metadata?.role === 'admin'
 
-    const userId: string = req.user.id
-    const commentId: string = getString(req.params.commentId)
-
-    console.log('Delete comment attempt - Comment ID:', commentId, 'User ID:', userId)
+    console.log('Delete comment attempt - Comment ID:', commentId, 'User ID:', userId, 'IsAdmin:', isAdmin)
 
     const comment = await Comment.findByPk(commentId)
     if (!comment) {
@@ -903,15 +734,18 @@ router.delete('/:commentId', requireAuth, async (req: AuthRequest, res: Response
       return res.status(404).json({ error: 'Comment not found' })
     }
 
-    if (comment.user_id !== userId && !isAdmin(req)) {
+    console.log('Comment found - Owner:', comment.user_id, 'Post:', comment.post_id)
+
+    if (comment.user_id !== userId && !isAdmin) {
       return res.status(403).json({ error: 'Unauthorized' })
     }
 
-    const postId: string = comment.post_id
-    const parentCommentId: string | null = comment.parent_comment_id
+    // Store IDs before deleting
+    const postId = comment.post_id
+    const parentCommentId = comment.parent_comment_id
 
-    // Delete all replies recursively
-    const deleteReplies = async (parentId: string): Promise<void> => {
+    // Function to delete all replies recursively
+    const deleteReplies = async (parentId: string) => {
       const replies = await Comment.findAll({ where: { parent_comment_id: parentId } })
       for (const reply of replies) {
         await deleteReplies(reply.id)
@@ -919,72 +753,65 @@ router.delete('/:commentId', requireAuth, async (req: AuthRequest, res: Response
       }
     }
 
+    // Delete all replies first
     await deleteReplies(comment.id)
+    
+    // Delete the comment
     await comment.destroy()
 
-    // Update counts
-    await Post.decrement('comments_count', { where: { id: postId } })
+    // Update post comments count
+    await Post.decrement('comments_count', { 
+      where: { id: postId }
+    })
 
+    // Update parent comment replies count if it's a reply
     if (parentCommentId) {
-      await Comment.decrement('replies_count', { where: { id: parentCommentId } })
+      await Comment.decrement('replies_count', { 
+        where: { id: parentCommentId }
+      })
     }
 
-    // ✅ SOCKET.IO - Emit comment deleted event
+    // ✅ SOCKET.IO - Emit comment deleted
     const io = req.app.get('io')
     if (io) {
-      const deleteData: CommentDeletedData = {
+      io.to(`post:${postId}`).emit('comment_deleted', {
         commentId,
         postId,
         parentCommentId,
-        deletedBy: userId,
         timestamp: Date.now()
-      }
-
-      io.to(`post:${postId}`).emit('comment_deleted', deleteData)
+      })
     }
 
     console.log('Comment deleted successfully:', commentId)
-    return res.json({ success: true, message: 'Comment deleted successfully' })
+    res.json({ success: true, message: 'Comment deleted successfully' })
   } catch (error) {
     console.error('Error deleting comment:', error)
-    return res.status(500).json({ error: 'Failed to delete comment: ' + (error as Error).message })
+    res.status(500).json({ error: 'Failed to delete comment: ' + (error as Error).message })
   }
 })
 
 // Get user's comments
-router.get('/user/my-comments', requireAuth, async (req: AuthRequest, res: Response) => {
+router.get('/user/my-comments', requireAuth, async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
+    const userId = req.user.id
+    const page = getNumber(req.query.page, 1)
+    const limit = getNumber(req.query.limit, 20)
 
-    const userId: string = req.user.id
-    const page: number = getNumber(req.query.page, 1)
-    const limit: number = getNumber(req.query.limit, 20)
-
-    const { count, rows: comments } = await Comment.findAndCountAll({
+    const comments = await Comment.findAll({
       where: { user_id: userId },
       include: [
         { model: Post, attributes: ['id', 'title', 'photo_url'] },
         { model: User, attributes: ['name', 'avatar_url'] }
       ],
       order: [['created_at', 'DESC']],
-      limit,
+      limit: limit,
       offset: (page - 1) * limit
     })
 
-    return res.json({
-      comments,
-      pagination: {
-        page,
-        limit,
-        total: count,
-        totalPages: Math.ceil(count / limit)
-      }
-    })
+    res.json(comments)
   } catch (error) {
     console.error('Error fetching user comments:', error)
-    return res.status(500).json({ error: 'Failed to fetch comments' })
+    res.status(500).json({ error: 'Failed to fetch comments' })
   }
 })
 

@@ -152,7 +152,7 @@
 
 // export default router
 
-// routes/priorityFeed.ts - WITH SOCKET.IO INTEGRATION
+// routes/priorityFeed.ts - ORIGINAL CODE + SOCKET.IO ONLY
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { Post } from '../models/Post'
@@ -165,90 +165,58 @@ import { Op } from 'sequelize'
 const router = Router()
 router.use(requireAuth)
 
-// Type definitions for socket events
-interface FeedUpdateData {
-  userId: string;
-  timestamp: number;
-  type: 'new_post' | 'like_update' | 'follow_change' | 'refresh';
-}
-
-interface SuggestionsUpdateData {
-  userId: string;
-  suggestionsCount: number;
-  timestamp: number;
-}
-
-interface StatsUpdateData {
-  userId: string;
-  stats: {
-    following: number;
-    followers: number;
-    likes_received: number;
-    likes_given: number;
-    engagement_rate: number;
-  };
-  timestamp: number;
-}
-
-// Priority feed endpoint
 router.get('/', async (req, res) => {
   try {
-    const userId: string = req.user.id
-    const page: number = Number(req.query.page) || 1
-    const limit: number = Number(req.query.limit) || 20
-    const offset: number = (page - 1) * limit
+    const userId = req.user.id
+    const { page = 1, limit = 20 } = req.query
+    const offset = (Number(page) - 1) * Number(limit)
 
-    // Get all relationships
     const following = await Follow.findAll({
       where: { follower_id: userId },
       attributes: ['following_id']
     })
-    const followingIds: string[] = following.map(f => f.following_id)
+    const followingIds = following.map(f => f.following_id)
 
     const followers = await Follow.findAll({
       where: { following_id: userId },
       attributes: ['follower_id']
     })
-    const followerIds: string[] = followers.map(f => f.follower_id)
+    const followerIds = followers.map(f => f.follower_id)
 
     const likedPosts = await PostLike.findAll({
       where: { user_id: userId },
       include: [{ model: Post, attributes: ['user_id'] }]
     })
-    const likedUserIds: string[] = [...new Set(likedPosts.map(lp => lp.post?.user_id).filter(Boolean) as string[])]
+    const likedUserIds = [...new Set(likedPosts.map(lp => lp.post?.user_id).filter(Boolean))]
 
     const userPosts = await Post.findAll({
       where: { user_id: userId },
       attributes: ['id']
     })
-    const userPostIds: string[] = userPosts.map(p => p.id)
-    
+    const userPostIds = userPosts.map(p => p.id)
     const postLikes = await PostLike.findAll({
       where: { post_id: userPostIds },
       attributes: ['user_id']
     })
-    const usersWhoLikedMyPosts: string[] = [...new Set(postLikes.map(pl => pl.user_id))]
+    const usersWhoLikedMyPosts = [...new Set(postLikes.map(pl => pl.user_id))]
 
-    // Calculate priority scores
     const priorityScores: Record<string, number> = {}
     followingIds.forEach(id => { priorityScores[id] = (priorityScores[id] || 0) + 100 })
     followerIds.forEach(id => { priorityScores[id] = (priorityScores[id] || 0) + 80 })
     likedUserIds.forEach(id => { priorityScores[id] = (priorityScores[id] || 0) + 60 })
     usersWhoLikedMyPosts.forEach(id => { priorityScores[id] = (priorityScores[id] || 0) + 40 })
 
-    // Get posts with pagination
-    const { count, rows: posts } = await Post.findAndCountAll({
+    const posts = await Post.findAll({
       where: { status: 'posted' },
       include: [
         { model: User, attributes: ['id', 'name', 'avatar_url'] },
         { model: PostLike, attributes: ['user_id'] },
         { model: Comment, attributes: ['id'] }
       ],
-      limit,
+      limit: Number(limit),
       offset
     })
 
-    // Sort by priority
     const sortedPosts = posts.sort((a, b) => {
       const priorityA = priorityScores[a.user_id] || 20
       const priorityB = priorityScores[b.user_id] || 20
@@ -256,7 +224,6 @@ router.get('/', async (req, res) => {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
 
-    // Enrich posts with relationship data
     const enrichedPosts = sortedPosts.map(post => ({
       ...post.toJSON(),
       priority: priorityScores[post.user_id] || 20,
@@ -264,58 +231,45 @@ router.get('/', async (req, res) => {
       follows_you: followerIds.includes(post.user_id)
     }))
 
-    // ✅ SOCKET.IO - Join feed room for real-time updates
+    // ✅ SOCKET.IO - Emit feed loaded
     const io = req.app.get('io')
     if (io) {
-      // The socket connection is handled client-side
-      // This just ensures the feed data is fresh
       io.to(`user:${userId}`).emit('feed_loaded', {
-        userId,
         postCount: enrichedPosts.length,
         timestamp: Date.now()
       })
     }
 
-    res.json({
-      posts: enrichedPosts,
-      pagination: {
-        page,
-        limit,
-        total: count,
-        totalPages: Math.ceil(count / limit)
-      }
-    })
+    res.json(enrichedPosts)
   } catch (error) {
     console.error('Priority feed error:', error)
     res.status(500).json({ error: 'Failed to get feed' })
   }
 })
 
-// Suggestions endpoint
 router.get('/suggestions', async (req, res) => {
   try {
-    const userId: string = req.user.id
-    const limit: number = Number(req.query.limit) || 10
+    const userId = req.user.id
+    const { limit = 10 } = req.query
 
     const following = await Follow.findAll({
       where: { follower_id: userId },
       attributes: ['following_id']
     })
-    const followingIds: string[] = following.map(f => f.following_id)
+    const followingIds = following.map(f => f.following_id)
 
     const followers = await Follow.findAll({
       where: { following_id: userId },
       attributes: ['follower_id']
     })
-    const followerIds: string[] = followers.map(f => f.follower_id)
+    const followerIds = followers.map(f => f.follower_id)
 
     const likedPosts = await PostLike.findAll({
       where: { user_id: userId },
       include: [{ model: Post, attributes: ['user_id'] }]
     })
-    const likedUserIds: string[] = [...new Set(likedPosts.map(lp => lp.post?.user_id).filter(Boolean) as string[])]
+    const likedUserIds = [...new Set(likedPosts.map(lp => lp.post?.user_id).filter(Boolean))]
 
-    // Combine and filter suggestions
     const suggestedIds = new Set([
       ...followerIds.filter(id => !followingIds.includes(id)),
       ...likedUserIds.filter(id => !followingIds.includes(id))
@@ -327,46 +281,25 @@ router.get('/suggestions', async (req, res) => {
       attributes: ['id', 'name', 'avatar_url', 'bio', 'followers_count']
     })
 
-    // Sort by followers count
     suggestedUsers.sort((a, b) => (b.followers_count || 0) - (a.followers_count || 0))
-    
-    const topSuggestions = suggestedUsers.slice(0, limit)
-
-    // ✅ SOCKET.IO - Emit suggestions update
-    const io = req.app.get('io')
-    if (io) {
-      const suggestionsData: SuggestionsUpdateData = {
-        userId,
-        suggestionsCount: topSuggestions.length,
-        timestamp: Date.now()
-      }
-      
-      io.to(`user:${userId}`).emit('suggestions_updated', {
-        ...suggestionsData,
-        suggestions: topSuggestions.map(u => u.id)
-      })
-    }
-
-    res.json(topSuggestions)
+    res.json(suggestedUsers.slice(0, Number(limit)))
   } catch (error) {
     console.error('Suggestions error:', error)
     res.status(500).json({ error: 'Failed to get suggestions' })
   }
 })
 
-// Stats endpoint
 router.get('/stats', async (req, res) => {
   try {
-    const userId: string = req.user.id
+    const userId = req.user.id
 
-    const following: number = await Follow.count({ where: { follower_id: userId } })
-    const followers: number = await Follow.count({ where: { following_id: userId } })
+    const following = await Follow.count({ where: { follower_id: userId } })
+    const followers = await Follow.count({ where: { following_id: userId } })
     
     const myPosts = await Post.findAll({ where: { user_id: userId }, attributes: ['id'] })
-    const myPostIds: string[] = myPosts.map(p => p.id)
-    
-    const likesReceived: number = await PostLike.count({ where: { post_id: myPostIds } })
-    const likesGiven: number = await PostLike.count({ where: { user_id: userId } })
+    const myPostIds = myPosts.map(p => p.id)
+    const likesReceived = await PostLike.count({ where: { post_id: myPostIds } })
+    const likesGiven = await PostLike.count({ where: { user_id: userId } })
 
     const stats = {
       following,
@@ -376,79 +309,19 @@ router.get('/stats', async (req, res) => {
       engagement_rate: followers > 0 ? (likesReceived / followers) * 100 : 0
     }
 
-    // ✅ SOCKET.IO - Emit stats update
+    // ✅ SOCKET.IO - Emit stats updated
     const io = req.app.get('io')
     if (io) {
-      const statsData: StatsUpdateData = {
-        userId,
-        stats,
+      io.to(`user:${userId}`).emit('user_stats_updated', {
+        ...stats,
         timestamp: Date.now()
-      }
-      
-      io.to(`user:${userId}`).emit('user_stats_updated', statsData)
+      })
     }
 
     res.json(stats)
   } catch (error) {
     console.error('Stats error:', error)
     res.status(500).json({ error: 'Failed to get stats' })
-  }
-})
-
-// Real-time feed refresh trigger (called when new post is created)
-router.post('/refresh', async (req, res) => {
-  try {
-    const userId: string = req.user.id
-    
-    // ✅ SOCKET.IO - Trigger feed refresh for user
-    const io = req.app.get('io')
-    if (io) {
-      const refreshData: FeedUpdateData = {
-        userId,
-        timestamp: Date.now(),
-        type: 'refresh'
-      }
-      
-      // Emit to the user's room
-      io.to(`user:${userId}`).emit('feed_refresh', refreshData)
-    }
-
-    res.json({ success: true, message: 'Feed refresh triggered' })
-  } catch (error) {
-    console.error('Feed refresh error:', error)
-    res.status(500).json({ error: 'Failed to refresh feed' })
-  }
-})
-
-// Mark feed as viewed (for analytics)
-router.post('/viewed', async (req, res) => {
-  try {
-    const userId: string = req.user.id
-    const { postIds }: { postIds: string[] } = req.body
-
-    if (!Array.isArray(postIds)) {
-      return res.status(400).json({ error: 'postIds array is required' })
-    }
-
-    // ✅ SOCKET.IO - Notify that user viewed these posts
-    const io = req.app.get('io')
-    if (io && postIds.length > 0) {
-      postIds.forEach((postId: string) => {
-        io.to(`post:${postId}`).emit('post_viewed_by', {
-          postId,
-          userId,
-          timestamp: Date.now()
-        })
-      })
-    }
-
-    res.json({ 
-      success: true, 
-      message: `Marked ${postIds.length} posts as viewed` 
-    })
-  } catch (error) {
-    console.error('Mark viewed error:', error)
-    res.status(500).json({ error: 'Failed to mark posts as viewed' })
   }
 })
 
