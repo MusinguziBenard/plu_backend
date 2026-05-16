@@ -371,12 +371,15 @@ router.post('/send', async (req, res) => {
 })
 
 
-// NEW: Send message to GROUP CHAT
+// ========== NEW: GROUP CHAT ENDPOINTS (NO DM CODE CHANGED) ==========
+
+const GROUP_CHAT_ROOM_ID = '123e4567-e89b-12d3-a456-426614174000'
+
+// NEW: Send message to group chat
 router.post('/group/send', async (req, res) => {
   try {
     const senderId = req.user.id
     const { content } = req.body
-    const GROUP_CHAT_ROOM_ID = '123e4567-e89b-12d3-a456-426614174000' // Your room user ID
 
     if (!content) {
       return res.status(400).json({ error: 'Content required' })
@@ -398,20 +401,17 @@ router.post('/group/send', async (req, res) => {
       ]
     })
 
-    // ✅ SOCKET.IO - Broadcast to ALL connected users
+    // Socket.IO - Broadcast to ALL connected clients
     const io = req.app.get('io')
     if (io) {
       const eventData = {
         messageId: message.id,
         senderId,
-        receiverId: GROUP_CHAT_ROOM_ID,
         content,
         sender: sender ? { id: sender.id, name: sender.name, avatar_url: sender.avatar_url } : null,
         timestamp: Date.now()
       }
-      
-      // Broadcast to EVERYONE for group chat
-      io.emit('group_message', eventData)
+      io.emit('group_new_message', eventData)
     }
 
     res.status(201).json(messageWithSender)
@@ -421,17 +421,15 @@ router.post('/group/send', async (req, res) => {
   }
 })
 
-// NEW: Get group chat messages
+// NEW: Get all group chat messages (from everyone)
 router.get('/group/messages', async (req, res) => {
   try {
-    const currentUserId = req.user.id
-    const GROUP_CHAT_ROOM_ID = '123e4567-e89b-12d3-a456-426614174000'
-
+    // Get ALL messages where sender OR receiver is the group chat room
     const messages = await DirectMessage.findAll({
       where: {
         [Op.or]: [
-          { sender_id: currentUserId, receiver_id: GROUP_CHAT_ROOM_ID },
-          { sender_id: GROUP_CHAT_ROOM_ID, receiver_id: currentUserId }
+          { receiver_id: GROUP_CHAT_ROOM_ID },
+          { sender_id: GROUP_CHAT_ROOM_ID }
         ]
       },
       include: [
