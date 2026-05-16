@@ -510,24 +510,56 @@ io.on('connection', (socket: any) => {
   socket.on('unfollow_user', (data: any) => {
     io.to(`user:${data.followingId}`).emit('user_unfollowed', { ...data, timestamp: Date.now() })
   })
+  
+// ========== DIRECT MESSAGE EVENTS ==========
+socket.on('send_message', (data: any) => {
+  const recipientSocket = onlineUsers.get(data.recipientId)
+  if (recipientSocket) {
+    io.to(recipientSocket).emit('new_message', { ...data.message, timestamp: Date.now() })
+  }
+  io.to(`user:${data.senderId}`).emit('message_sent_confirmation', { ...data, timestamp: Date.now() })
+})
 
-  // ========== DIRECT MESSAGE EVENTS ==========
-  socket.on('send_message', (data: any) => {
-    const recipientSocket = onlineUsers.get(data.recipientId)
-    if (recipientSocket) {
-      io.to(recipientSocket).emit('new_message', { ...data.message, timestamp: Date.now() })
-    }
-    io.to(`user:${data.senderId}`).emit('message_sent_confirmation', { ...data, timestamp: Date.now() })
+// 🆕 ADD THIS: GROUP CHAT MESSAGE HANDLER
+socket.on('send_group_message', (data: any) => {
+  // Broadcast to EVERYONE except sender
+  socket.broadcast.emit('group_new_message', {
+    messageId: data.messageId,
+    senderId: data.senderId,
+    senderName: data.senderName,
+    content: data.content,
+    timestamp: Date.now()
   })
-  socket.on('typing_start', (data: any) => {
-    socket.to(`user:${data.conversationId}`).emit('user_typing', data)
+  
+  // Also send confirmation to sender
+  socket.emit('group_message_sent', {
+    messageId: data.messageId,
+    timestamp: Date.now()
   })
-  socket.on('typing_stop', (data: any) => {
-    socket.to(`user:${data.conversationId}`).emit('user_stopped_typing', data)
+})
+
+// Or simpler: broadcast to ALL connected clients including sender
+socket.on('send_group_message', (data: any) => {
+  io.emit('group_new_message', {
+    messageId: data.messageId,
+    senderId: data.senderId,
+    senderName: data.senderName,
+    content: data.content,
+    timestamp: Date.now()
   })
-  socket.on('mark_read', (data: any) => {
-    io.to(`user:${data.senderId}`).emit('messages_read', { ...data, timestamp: Date.now() })
-  })
+})
+
+socket.on('typing_start', (data: any) => {
+  socket.to(`user:${data.conversationId}`).emit('user_typing', data)
+})
+
+socket.on('typing_stop', (data: any) => {
+  socket.to(`user:${data.conversationId}`).emit('user_stopped_typing', data)
+})
+
+socket.on('mark_read', (data: any) => {
+  io.to(`user:${data.senderId}`).emit('messages_read', { ...data, timestamp: Date.now() })
+})
 
   // ========== LIVE EVENT EVENTS ==========
   socket.on('event_chat', (data: any) => {
