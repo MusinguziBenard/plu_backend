@@ -510,7 +510,7 @@ io.on('connection', (socket: any) => {
   socket.on('unfollow_user', (data: any) => {
     io.to(`user:${data.followingId}`).emit('user_unfollowed', { ...data, timestamp: Date.now() })
   })
-  
+
 // ========== DIRECT MESSAGE EVENTS ==========
 socket.on('send_message', (data: any) => {
   const recipientSocket = onlineUsers.get(data.recipientId)
@@ -520,7 +520,7 @@ socket.on('send_message', (data: any) => {
   io.to(`user:${data.senderId}`).emit('message_sent_confirmation', { ...data, timestamp: Date.now() })
 })
 
-// 🆕 ADD THIS: GROUP CHAT MESSAGE HANDLER
+//  ADD THIS: GROUP CHAT MESSAGE HANDLER
 socket.on('send_group_message', (data: any) => {
   // Broadcast to EVERYONE except sender
   socket.broadcast.emit('group_new_message', {

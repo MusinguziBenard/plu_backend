@@ -370,6 +370,85 @@ router.post('/send', async (req, res) => {
   }
 })
 
+
+// NEW: Send message to GROUP CHAT
+router.post('/group/send', async (req, res) => {
+  try {
+    const senderId = req.user.id
+    const { content } = req.body
+    const GROUP_CHAT_ROOM_ID = '123e4567-e89b-12d3-a456-426614174000' // Your room user ID
+
+    if (!content) {
+      return res.status(400).json({ error: 'Content required' })
+    }
+
+    const message = await DirectMessage.create({
+      sender_id: senderId,
+      receiver_id: GROUP_CHAT_ROOM_ID,
+      content,
+      parent_message_id: null
+    })
+
+    const sender = await User.findByPk(senderId)
+
+    const messageWithSender = await DirectMessage.findByPk(message.id, {
+      include: [
+        { model: User, as: 'sender', attributes: ['id', 'name', 'avatar_url'] },
+        { model: User, as: 'receiver', attributes: ['id', 'name', 'avatar_url'] }
+      ]
+    })
+
+    // ✅ SOCKET.IO - Broadcast to ALL connected users
+    const io = req.app.get('io')
+    if (io) {
+      const eventData = {
+        messageId: message.id,
+        senderId,
+        receiverId: GROUP_CHAT_ROOM_ID,
+        content,
+        sender: sender ? { id: sender.id, name: sender.name, avatar_url: sender.avatar_url } : null,
+        timestamp: Date.now()
+      }
+      
+      // Broadcast to EVERYONE for group chat
+      io.emit('group_message', eventData)
+    }
+
+    res.status(201).json(messageWithSender)
+  } catch (error) {
+    console.error('Send group message error:', error)
+    res.status(500).json({ error: 'Failed to send group message' })
+  }
+})
+
+// NEW: Get group chat messages
+router.get('/group/messages', async (req, res) => {
+  try {
+    const currentUserId = req.user.id
+    const GROUP_CHAT_ROOM_ID = '123e4567-e89b-12d3-a456-426614174000'
+
+    const messages = await DirectMessage.findAll({
+      where: {
+        [Op.or]: [
+          { sender_id: currentUserId, receiver_id: GROUP_CHAT_ROOM_ID },
+          { sender_id: GROUP_CHAT_ROOM_ID, receiver_id: currentUserId }
+        ]
+      },
+      include: [
+        { model: User, as: 'sender', attributes: ['id', 'name', 'avatar_url'] },
+        { model: User, as: 'receiver', attributes: ['id', 'name', 'avatar_url'] }
+      ],
+      order: [['created_at', 'ASC']]
+    })
+
+    res.json(messages)
+  } catch (error) {
+    console.error('Get group messages error:', error)
+    res.status(500).json({ error: 'Failed to get group messages' })
+  }
+})
+
+
 // Get conversation between two users
 router.get('/conversation/:userId', async (req, res) => {
   try {
