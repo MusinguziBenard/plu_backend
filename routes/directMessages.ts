@@ -306,7 +306,7 @@ import { DirectMessage } from '../models/DirectMessage'
 import { User } from '../models/User'
 import pushService from '../services/expoPushNotification'
 import { Op } from 'sequelize'
-
+import { Sequelize } from 'sequelize-typescript'
 const router = Router()
 router.use(requireAuth)
 
@@ -545,12 +545,11 @@ router.get('/conversations', async (req, res) => {
 })
 
 
-
-// ========== NEW: GROUP CHAT ENDPOINTS ==========
+// Fix for the group endpoints - proper typing
 
 const GROUP_CHAT_ROOM_ID = '123e4567-e89b-12d3-a456-426614174000'
 
-// NEW: Send message to group chat (protected - needs user)
+// Send message to group chat
 router.post('/group/send', async (req, res) => {
   try {
     const senderId = req.user.id
@@ -560,6 +559,7 @@ router.post('/group/send', async (req, res) => {
       return res.status(400).json({ error: 'Content required' })
     }
 
+    // Use DirectMessage model instead of raw SQL to avoid type issues
     const message = await DirectMessage.create({
       sender_id: senderId,
       receiver_id: GROUP_CHAT_ROOM_ID,
@@ -567,13 +567,31 @@ router.post('/group/send', async (req, res) => {
       parent_message_id: null
     })
 
-    const sender = await User.findByPk(senderId)
-
-    const messageWithSender = await DirectMessage.findByPk(message.id, {
-      include: [
-        { model: User, as: 'sender', attributes: ['id', 'name', 'avatar_url'] }
-      ]
+    const sender = await User.findByPk(senderId, {
+      attributes: ['id', 'name', 'avatar_url']
     })
+
+    const messageWithSender = {
+      id: message.id,
+      sender_id: message.sender_id,
+      content: message.content,
+      created_at: message.created_at,
+      read: false,
+      sender: sender
+    }
+
+    // Broadcast to ALL connected clients
+    const io = req.app.get('io')
+    if (io) {
+      io.emit('group_new_message', {
+        messageId: message.id,
+        senderId: senderId,
+        senderName: sender?.name,
+        senderAvatar: sender?.avatar_url,
+        content: content,
+        timestamp: Date.now()
+      })
+    }
 
     res.status(201).json(messageWithSender)
   } catch (error) {
@@ -582,17 +600,15 @@ router.post('/group/send', async (req, res) => {
   }
 })
 
-// NEW: Get ALL group messages - NO RESTRICTIONS, just read all messages for this room
+// Get ALL group messages
 router.get('/group/messages', async (req, res) => {
   try {
-    // Simply get ALL messages where receiver OR sender is the group room
-    // No user filtering - everyone sees everything
+    const currentUserId = req.user.id
+
+    // Get ALL messages where receiver_id is the group room
     const messages = await DirectMessage.findAll({
       where: {
-        [Op.or]: [
-          { receiver_id: GROUP_CHAT_ROOM_ID },
-          { sender_id: GROUP_CHAT_ROOM_ID }
-        ]
+        receiver_id: GROUP_CHAT_ROOM_ID
       },
       include: [
         { model: User, as: 'sender', attributes: ['id', 'name', 'avatar_url'] }
@@ -600,10 +616,51 @@ router.get('/group/messages', async (req, res) => {
       order: [['created_at', 'ASC']]
     })
 
-    res.json(messages)
+    // Format messages
+    const formattedMessages = messages.map(msg => ({
+      id: msg.id,
+      sender_id: msg.sender_id,
+      content: msg.content,
+      created_at: msg.created_at,
+      read: false,
+      sender: msg.sender
+    }))
+
+    res.json(formattedMessages)
   } catch (error) {
     console.error('Get group messages error:', error)
     res.status(500).json({ error: 'Failed to get group messages' })
+  }
+})
+
+// Mark messages as read
+router.post('/group/mark-read', async (req, res) => {
+  try {
+    const currentUserId = req.user.id
+
+    await DirectMessage.update(
+      { read: true },
+      {
+        where: {
+          receiver_id: currentUserId,
+          sender_id: GROUP_CHAT_ROOM_ID,
+          read: false
+        }
+      }
+    )
+
+    const io = req.app.get('io')
+    if (io) {
+      io.emit('group_messages_read', {
+        readBy: currentUserId,
+        timestamp: Date.now()
+      })
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Mark read error:', error)
+    res.status(500).json({ error: 'Failed to mark as read' })
   }
 })
 
