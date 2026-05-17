@@ -365,6 +365,7 @@ router.post('/:id/view', async (req, res) => {
 
 
 // routes/posts.ts - Add this public endpoint with socket emissions
+// routes/posts.ts - FIXED with proper error handling
 router.get('/public-feed', async (req, res) => {
   const { page = 1, limit = 20 } = req.query
   const offset = (Number(page) - 1) * Number(limit)
@@ -383,9 +384,9 @@ router.get('/public-feed', async (req, res) => {
     })
     
     res.json(posts)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Public feed error:', error)
-    res.status(500).json({ error: 'Failed to load feed' })
+    res.status(500).json({ error: 'Failed to load feed', message: error?.message || 'Unknown error' })
   }
 })
 
