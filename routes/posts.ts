@@ -365,7 +365,7 @@ router.post('/:id/view', async (req, res) => {
 
 
 // routes/posts.ts - Add this public endpoint with socket emissions
-// FIXED PUBLIC FEED - Minimal & Robust
+// ULTRA SAFE PUBLIC FEED - No associations
 router.get('/public-feed', async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
@@ -373,31 +373,25 @@ router.get('/public-feed', async (req, res) => {
   try {
     const posts = await Post.findAll({
       where: { status: 'posted' },
-      include: [
-        {
-          model: require('../models/User').User,
-          attributes: ['id', 'name', 'avatar_url'],
-          required: false   // ← This helps a lot
-        }
-      ],
+      // NO include at all for now
       order: [['created_at', 'DESC']],
       limit: Number(limit),
       offset: offset,
       attributes: [
         'id', 'title', 'description', 'photo_url', 'created_at',
         'views_count', 'likes_count', 'comments_count', 'category'
-      ],
-      raw: false,
-      nest: true
+      ]
     });
 
+    console.log(`✅ Public feed: ${posts.length} posts returned`);
     res.json(posts || []);
   } catch (error: any) {
-    console.error('🚨 Public feed error:', error.message);
+    console.error('🚨 CRITICAL Public feed error:', error.message);
     console.error(error.stack);
     res.status(500).json({ 
       error: 'Failed to load public feed', 
-      message: error.message 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
