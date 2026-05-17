@@ -362,7 +362,34 @@ router.post('/:id/view', async (req, res) => {
   }
 })
 
-// =================================
+
+
+// routes/posts.ts - Add this public endpoint with socket emissions
+router.get('/public-feed', async (req, res) => {
+  const { page = 1, limit = 20 } = req.query
+  const offset = (Number(page) - 1) * Number(limit)
+  
+  try {
+    const posts = await Post.findAll({
+      where: { status: 'posted' },
+      include: [{ 
+        model: require('../models/User').User, 
+        attributes: ['id', 'name', 'avatar_url'] 
+      }],
+      order: [['created_at', 'DESC']],
+      limit: Number(limit),
+      offset,
+      attributes: ['id', 'title', 'description', 'photo_url', 'created_at', 'views_count', 'likes_count', 'comments_count']
+    })
+    
+    res.json(posts)
+  } catch (error) {
+    console.error('Public feed error:', error)
+    res.status(500).json({ error: 'Failed to load feed' })
+  }
+})
+
+
 // 2. PROTECTED ROUTES
 // =================================
 const protectedRouter = Router()

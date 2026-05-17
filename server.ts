@@ -531,6 +531,15 @@ socket.on('send_group_message', (data: any) => {
     timestamp: Date.now()
   })
   
+  socket.on('join_public_feed', () => {
+    socket.join('public_feed')
+    console.log('Socket joined public_feed room')
+  })
+  
+  socket.on('leave_public_feed', () => {
+    socket.leave('public_feed')
+  })
+  
   // Also send confirmation to sender
   socket.emit('group_message_sent', {
     messageId: data.messageId,
