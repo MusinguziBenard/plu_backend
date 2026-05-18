@@ -428,6 +428,56 @@ protectedRouter.get('/my-votes', async (req, res) => {
   }
 })
 
+
+// Get poll by post ID
+protectedRouter.get('/post/:postId', async (req, res) => {
+  try {
+    const { postId } = req.params;
+    
+    const poll = await Poll.findOne({
+      where: { post_id: postId, is_active: true },
+      include: [
+        { model: PollOption },
+        { model: User, as: 'creator', attributes: ['id', 'name', 'avatar_url'] }
+      ]
+    });
+    
+    if (!poll) {
+      return res.status(404).json({ error: 'No poll found for this post' });
+    }
+    
+    // Get user's vote if logged in
+    let userVote = null;
+    if (req.user?.id) {
+      const [results] = await sequelize.query(
+        `SELECT pv.option_id FROM poll_votes pv 
+         JOIN poll_options po ON po.id = pv.option_id 
+         WHERE pv.user_id = :userId AND po.poll_id = :pollId`,
+        {
+          replacements: { userId: req.user.id, pollId: poll.id },
+          type: 'SELECT'
+        }
+      );
+      
+      // Type assertion for the results
+      const votes = results as any[];
+      if (votes && votes.length > 0 && votes[0].option_id) {
+        userVote = votes[0].option_id;
+      }
+    }
+    
+    const pollData = poll.toJSON();
+    if (userVote) {
+      pollData.user_vote = userVote;
+    }
+    
+    res.json(pollData);
+  } catch (error) {
+    console.error('Get poll by post error:', error);
+    res.status(500).json({ error: 'Failed to get poll' });
+  }
+});
+
 // 4. POST vote
 protectedRouter.post('/vote/:pollId', async (req, res) => {
   try {
