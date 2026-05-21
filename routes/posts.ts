@@ -248,7 +248,7 @@
 // export default router
 
 
-// routes/posts.ts - WITH SOCKET.IO (ORIGINAL CODE PRESERVED)
+// routes/posts.ts - WITH BROADCAST NOTIFICATIONS ON POST APPROVAL
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { Post } from '../models/Post'
@@ -258,6 +258,96 @@ import { pushService } from '../services/expoPushNotification'
 import { Op } from 'sequelize'
 
 const router = Router()
+
+// ============ HELPER: BROADCAST TO ALL USERS ============
+async function broadcastToAllUsers(
+  io: any,
+  post: any,
+  user: any,
+  excludeUserId?: string
+) {
+  try {
+    const { User: UserModel } = require('../models/User');
+    const { Notification } = require('../models/Notification');
+    const { UserPushToken } = require('../models/UserPushToken');
+    
+    const broadcastMessage = `${user?.name || 'Someone'} just posted: "${post.title.substring(0, 50)}"`;
+    
+    console.log(`📢 Broadcasting new post to all users: ${post.id}`);
+    
+    if (io) {
+      // Socket broadcast to all connected users
+      io.emit('new_post_broadcast', {
+        postId: post.id,
+        postTitle: post.title,
+        postPhoto: post.photo_url,
+        userName: user?.name || 'Someone',
+        message: broadcastMessage,
+        timestamp: Date.now()
+      });
+    }
+    
+    // Create in-app notifications for all users (except post owner)
+    const allUsers = await UserModel.findAll({
+      where: excludeUserId ? { id: { [Op.ne]: excludeUserId } } : {},
+      attributes: ['id']
+    });
+    
+    if (allUsers.length > 0) {
+      const notificationTemplate = {
+        type: 'new_post_broadcast',
+        reference_id: post.id,
+        title: 'New Post Alert',
+        message: broadcastMessage,
+        read: false,
+        push_sent: false,
+        data: JSON.stringify({
+          postId: post.id,
+          postTitle: post.title,
+          postPhoto: post.photo_url,
+          userName: user?.name,
+          action: 'view_post'
+        })
+      };
+      
+      const batchSize = 100;
+      for (let i = 0; i < allUsers.length; i += batchSize) {
+        const batch = allUsers.slice(i, i + batchSize);
+        const notificationBatch = batch.map((u: any) => ({
+          user_id: u.id,
+          ...notificationTemplate
+        }));
+        await Notification.bulkCreate(notificationBatch, { ignoreDuplicates: true });
+      }
+      console.log(`📝 Created ${allUsers.length} in-app notifications for new post`);
+    }
+    
+    // Send push notifications to all users
+    const activeTokens = await UserPushToken.findAll({
+      where: { is_active: true },
+      include: [{ model: UserModel, attributes: ['id'] }]
+    });
+    
+    const tokensToSend = excludeUserId
+      ? activeTokens.filter((token: any) => token.user_id !== excludeUserId)
+      : activeTokens;
+    
+    if (tokensToSend.length > 0) {
+      console.log(`📱 Sending push to ${tokensToSend.length} users for new post`);
+      for (const token of tokensToSend) {
+        pushService.sendPushNotification(
+          token.expo_push_token,
+          'New Post Alert',
+          broadcastMessage,
+          { postId: post.id, screen: 'Feed', type: 'new_post' }
+        ).catch(err => console.error('Push failed:', err.message));
+      }
+    }
+  } catch (error) {
+    console.error('Broadcast error:', error);
+  }
+}
+// ============ END HELPER ============
 
 // =================================
 // 1. PUBLIC ROUTES
@@ -345,7 +435,6 @@ router.post('/:id/view', async (req, res) => {
       })
     }
     
-    // ✅ SOCKET.IO - Emit view event
     const io = req.app.get('io')
     if (io) {
       io.to(`post:${postId}`).emit('view_count_updated', {
@@ -362,31 +451,24 @@ router.post('/:id/view', async (req, res) => {
   }
 })
 
-
-
-// routes/posts.ts - Add this public endpoint with socket emissions
-// ULTRA SIMPLE PUBLIC FEED - NO ASSOCIATIONS, NO COMPLEX QUERIES
+// ULTRA SIMPLE PUBLIC FEED
 router.get('/public-feed', async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
   try {
-    // Simplest possible query - just get posts
     const posts = await Post.findAll({
       where: { status: 'posted' },
       order: [['created_at', 'DESC']],
       limit: Number(limit),
       offset: offset
     });
-
-    // Send back raw posts
     res.json(posts);
   } catch (error: any) {
     console.error('Public feed error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
-
 
 // 2. PROTECTED ROUTES
 // =================================
@@ -417,7 +499,6 @@ protectedRouter.post('/create', async (req: any, res) => {
     category,
   })
 
-  // Notify admins about new post
   const admins = await require('../models/User').User.findAll({
     where: { role: 'admin' }
   })
@@ -434,7 +515,6 @@ protectedRouter.post('/create', async (req: any, res) => {
     )
   }
 
-  // ✅ SOCKET.IO - Notify admins about new post
   const io = req.app.get('io')
   if (io) {
     io.to('admins').emit('new_post_submitted', {
@@ -462,7 +542,7 @@ protectedRouter.post('/create', async (req: any, res) => {
 const isAdmin = (req: any) => 
   req.user.role === 'admin' || req.user.user_metadata?.role === 'admin'
 
-// Approve post
+// Approve post - UPDATED WITH BROADCAST TO ALL USERS
 protectedRouter.post('/approve/:id', async (req: any, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admin only' })
   
@@ -475,19 +555,24 @@ protectedRouter.post('/approve/:id', async (req: any, res) => {
   post.status = 'posted'
   await post.save()
   
-  // Notify post owner
+  const postOwner = post.user;
+  const io = req.app.get('io')
+  
+  // 1. Notify post owner (original code)
   await pushService.createAndSend(
     post.user_id,
     'post_approved',
     post.id,
-    'Your Post is Live! 🎉',
+    'Your Post is Live!',
     `"${post.title}" has been approved and is now visible to everyone`,
     post.photo_url || undefined,
     { postId: post.id, action: 'view' }
   )
   
-  // ✅ SOCKET.IO - Emit post approved
-  const io = req.app.get('io')
+  // 2. BROADCAST TO ALL OTHER USERS (NEW FEATURE)
+  await broadcastToAllUsers(io, post, postOwner, post.user_id);
+  
+  // 3. Socket.IO updates (original code)
   if (io) {
     io.emit('feed_new_post', { post: post.toJSON(), timestamp: Date.now() })
     io.to(`user:${post.user_id}`).emit('post_approved', {
@@ -503,7 +588,10 @@ protectedRouter.post('/approve/:id', async (req: any, res) => {
     })
   }
   
-  res.json({ success: true, message: 'LIVE!' })
+  res.json({ 
+    success: true, 
+    message: 'Post approved and broadcasted to all users!' 
+  })
 })
 
 // Reject post
@@ -518,7 +606,6 @@ protectedRouter.post('/reject/:id', async (req: any, res) => {
   post.status = 'rejected'
   await post.save()
   
-  // Notify post owner
   await pushService.createAndSend(
     post.user_id,
     'post_rejected',
@@ -529,7 +616,6 @@ protectedRouter.post('/reject/:id', async (req: any, res) => {
     { postId: post.id }
   )
   
-  // ✅ SOCKET.IO - Emit post rejected
   const io = req.app.get('io')
   if (io) {
     io.to(`user:${post.user_id}`).emit('post_rejected', {
@@ -553,7 +639,6 @@ protectedRouter.delete('/admin/delete/:id', async (req: any, res) => {
   const postUserId = post.user_id
   await post.destroy()
   
-  // ✅ SOCKET.IO - Emit post deleted
   const io = req.app.get('io')
   if (io) {
     io.to(`post:${postId}`).emit('post_removed', { postId, timestamp: Date.now() })
@@ -593,7 +678,6 @@ protectedRouter.patch('/update/:id', async (req: any, res) => {
 
   await post.save()
   
-  // ✅ SOCKET.IO - Emit post updated
   const io = req.app.get('io')
   if (io) {
     io.to(`post:${post.id}`).emit('post_updated', {
