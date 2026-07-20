@@ -11,7 +11,7 @@ const sequelize = new Sequelize(process.env.DATABASE_URL!, {
     path.join(__dirname, '../models/PostLike.ts'),
     path.join(__dirname, '../models/Comment.ts'),
     path.join(__dirname, '../models/CommentLike.ts'),
-    path.join(__dirname, '../models/PostView.ts'),  // Make sure this is after Post and User
+    path.join(__dirname, '../models/PostView.ts'),
     path.join(__dirname, '../models/Notification.ts'),
     path.join(__dirname, '../models/UserPushToken.ts'),
     path.join(__dirname, '../models/SavedPost.ts'),
@@ -25,6 +25,9 @@ const sequelize = new Sequelize(process.env.DATABASE_URL!, {
     path.join(__dirname, '../models/Tag.ts'),
     path.join(__dirname, '../models/Invite.ts'),
     path.join(__dirname, '../models/InteractionPreference.ts'),
+    // ========== NEW CALLING MODELS ==========
+    path.join(__dirname, '../models/CallRoom.ts'),
+    path.join(__dirname, '../models/Block.ts'),
   ],
   dialectOptions: {
     ssl: { require: true, rejectUnauthorized: false },

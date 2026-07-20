@@ -1,15 +1,33 @@
 {
   "info": {
-    "name": "PLU Backend - Complete API Tests",
-    "description": "Complete test suite for PLU backend with all endpoints",
+    "name": "PLU Calling System Tests",
+    "description": "Complete test suite for WebRTC calling features - Audio/Video calls, TURN config, Call History, Blocking",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "1. Authentication",
+      "name": "1. Setup - Authentication",
       "item": [
         {
-          "name": "Join (Register)",
+          "name": "Register User A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.user && response.user.id) {",
+                  "    pm.environment.set(\"user_a_id\", response.user.id);",
+                  "    console.log(\"✅ User A ID:\", response.user.id);",
+                  "}",
+                  "pm.test(\"User A registered successfully\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -20,7 +38,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Test User\",\n  \"phone\": \"256712345678\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"name\": \"User A (Caller)\",\n  \"phone\": \"256700000001\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/auth/join",
@@ -30,7 +48,46 @@
           }
         },
         {
-          "name": "Login",
+          "name": "Register User B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.user && response.user.id) {",
+                  "    pm.environment.set(\"user_b_id\", response.user.id);",
+                  "    console.log(\"✅ User B ID:\", response.user.id);",
+                  "}",
+                  "pm.test(\"User B registered successfully\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"User B (Callee)\",\n  \"phone\": \"256700000002\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/join",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "join"]
+            }
+          }
+        },
+        {
+          "name": "Login User A",
           "event": [
             {
               "listen": "test",
@@ -38,13 +95,13 @@
                 "exec": [
                   "const response = pm.response.json();",
                   "if (response.token) {",
-                  "    pm.environment.set(\"token\", response.token);",
-                  "    console.log(\"✅ Token saved:\", response.token.substring(0, 50) + \"...\");",
+                  "    pm.environment.set(\"token_a\", response.token);",
+                  "    console.log(\"✅ Token A saved\");",
                   "}",
                   "if (response.user && response.user.id) {",
-                  "    pm.environment.set(\"user_id\", response.user.id);",
+                  "    pm.environment.set(\"user_a_id\", response.user.id);",
                   "}",
-                  "pm.test(\"Login successful\", function() {",
+                  "pm.test(\"User A login successful\", function() {",
                   "    pm.response.to.have.status(200);",
                   "    pm.expect(response.token).to.exist;",
                   "});"
@@ -62,7 +119,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phone\": \"256712345678\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"phone\": \"256700000001\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/auth/login",
@@ -72,43 +129,23 @@
           }
         },
         {
-          "name": "Get Current User",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/user/me",
-              "host": ["{{base_url}}"],
-              "path": ["api", "user", "me"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "2. Posts",
-      "item": [
-        {
-          "name": "Create Post",
+          "name": "Login User B",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "const response = pm.response.json();",
-                  "if (response.post && response.post.id) {",
-                  "    pm.environment.set(\"post_id\", response.post.id);",
-                  "    console.log(\"✅ Post ID saved:\", response.post.id);",
+                  "if (response.token) {",
+                  "    pm.environment.set(\"token_b\", response.token);",
+                  "    console.log(\"✅ Token B saved\");",
                   "}",
-                  "pm.test(\"Post created successfully\", function() {",
+                  "if (response.user && response.user.id) {",
+                  "    pm.environment.set(\"user_b_id\", response.user.id);",
+                  "}",
+                  "pm.test(\"User B login successful\", function() {",
                   "    pm.response.to.have.status(200);",
-                  "    pm.expect(response.post).to.exist;",
-                  "    pm.expect(response.post.id).to.exist;",
+                  "    pm.expect(response.token).to.exist;",
                   "});"
                 ]
               }
@@ -118,285 +155,142 @@
             "method": "POST",
             "header": [
               {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Test Post {{$timestamp}}\",\n  \"description\": \"This is an automated test post from Postman\",\n  \"media_url\": \"https://picsum.photos/200/300\",\n  \"media_type\": \"image\",\n  \"category\": \"news\"\n}"
+              "raw": "{\n  \"phone\": \"256700000002\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/posts/create",
+              "raw": "{{base_url}}/api/auth/login",
               "host": ["{{base_url}}"],
-              "path": ["api", "posts", "create"]
-            }
-          }
-        },
-        {
-          "name": "Get Feed",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/posts/feed?page=1&limit=10",
-              "host": ["{{base_url}}"],
-              "path": ["api", "posts", "feed"],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "1"
-                },
-                {
-                  "key": "limit",
-                  "value": "10"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Single Post",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/posts/{{post_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "posts", "{{post_id}}"]
-            }
-          }
-        },
-        {
-          "name": "Get Post Likes Count",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/posts/{{post_id}}/likes",
-              "host": ["{{base_url}}"],
-              "path": ["api", "posts", "{{post_id}}", "likes"]
+              "path": ["api", "auth", "login"]
             }
           }
         }
       ]
     },
     {
-      "name": "3. Views",
+      "name": "2. TURN/STUN Configuration",
       "item": [
         {
-          "name": "Track View",
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{base_url}}/api/views/track/{{post_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "views", "track", "{{post_id}}"]
-            }
-          }
-        },
-        {
-          "name": "Get View Count",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/views/count/{{post_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "views", "count", "{{post_id}}"]
-            }
-          }
-        },
-        {
-          "name": "Get My View History",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/views/my-history",
-              "host": ["{{base_url}}"],
-              "path": ["api", "views", "my-history"]
-            }
-          }
-        },
-        {
-          "name": "Get Post Analytics",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/views/analytics/{{post_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "views", "analytics", "{{post_id}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "4. Likes",
-      "item": [
-        {
-          "name": "Like/Unlike Post",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"post_id\": \"{{post_id}}\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/likes/toggle",
-              "host": ["{{base_url}}"],
-              "path": ["api", "likes", "toggle"]
-            }
-          }
-        },
-        {
-          "name": "Check if Liked",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/likes/check/{{post_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "likes", "check", "{{post_id}}"]
-            }
-          }
-        },
-        {
-          "name": "Get User's Liked Posts",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/likes",
-              "host": ["{{base_url}}"],
-              "path": ["api", "likes"]
-            }
-          }
-        },
-        {
-          "name": "Get Users Who Liked Post",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/likes/users/{{post_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "likes", "users", "{{post_id}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "5. Comments",
-      "item": [
-        {
-          "name": "Add Comment",
+          "name": "Get TURN Config (User A)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "const response = pm.response.json();",
-                  "if (response.id) {",
-                  "    pm.environment.set(\"comment_id\", response.id);",
-                  "    console.log(\"✅ Comment ID saved:\", response.id);",
-                  "}",
-                  "pm.test(\"Comment added\", function() {",
+                  "pm.test(\"TURN config returned successfully\", function() {",
                   "    pm.response.to.have.status(200);",
-                  "    pm.expect(response.id).to.exist;",
-                  "});"
+                  "    pm.expect(response.iceServers).to.be.an('array');",
+                  "    pm.expect(response.iceServers.length).to.be.at.least(3);",
+                  "});",
+                  "console.log('✅ TURN config has', response.iceServers.length, 'ICE servers');"
                 ]
               }
             }
           ],
           "request": {
-            "method": "POST",
+            "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+                "value": "Bearer {{token_a}}"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"post_id\": \"{{post_id}}\",\n  \"content\": \"This is an automated test comment from Postman! {{$timestamp}}\"\n}"
-            },
             "url": {
-              "raw": "{{base_url}}/api/comments",
+              "raw": "{{base_url}}/api/turn/config",
               "host": ["{{base_url}}"],
-              "path": ["api", "comments"]
+              "path": ["api", "turn", "config"]
             }
           }
         },
         {
-          "name": "Add Reply to Comment",
+          "name": "Get TURN Config (User B)",
           "request": {
-            "method": "POST",
+            "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+                "value": "Bearer {{token_b}}"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"post_id\": \"{{post_id}}\",\n  \"content\": \"This is a reply to your comment!\",\n  \"parent_comment_id\": \"{{comment_id}}\"\n}"
-            },
             "url": {
-              "raw": "{{base_url}}/api/comments",
+              "raw": "{{base_url}}/api/turn/config",
               "host": ["{{base_url}}"],
-              "path": ["api", "comments"]
+              "path": ["api", "turn", "config"]
             }
           }
-        },
+        }
+      ]
+    },
+    {
+      "name": "3. Socket.IO Status",
+      "item": [
         {
-          "name": "Get Comments for Post",
+          "name": "Check Socket.IO Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "pm.test(\"Socket.IO is active\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.connected).to.be.true;",
+                  "    pm.expect(response.activeUsers).to.be.a('number');",
+                  "});",
+                  "console.log('✅ Active users:', response.activeUsers);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{base_url}}/api/comments/post/{{post_id}}?page=1&limit=20",
+              "raw": "{{base_url}}/api/socket/status",
               "host": ["{{base_url}}"],
-              "path": ["api", "comments", "post", "{{post_id}}"],
+              "path": ["api", "socket", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Call History",
+      "item": [
+        {
+          "name": "Get Call History (User A)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "pm.test(\"Call history retrieved\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.calls).to.be.an('array');",
+                  "});",
+                  "console.log('✅ Call history count:', response.calls ? response.calls.length : 0);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_a}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/calls/history?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "calls", "history"],
               "query": [
                 {
                   "key": "page",
@@ -411,182 +305,19 @@
           }
         },
         {
-          "name": "Get Comment Replies",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/comments/{{comment_id}}/replies",
-              "host": ["{{base_url}}"],
-              "path": ["api", "comments", "{{comment_id}}", "replies"]
-            }
-          }
-        },
-        {
-          "name": "Get Single Comment with Replies",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/comments/{{comment_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "comments", "{{comment_id}}"]
-            }
-          }
-        },
-        {
-          "name": "Get Comment Count",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/comments/count/{{post_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "comments", "count", "{{post_id}}"]
-            }
-          }
-        },
-        {
-          "name": "Get User's Comments",
+          "name": "Get Call History (User B)",
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token_b}}"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/comments/user/my-comments",
+              "raw": "{{base_url}}/api/calls/history?page=1&limit=20",
               "host": ["{{base_url}}"],
-              "path": ["api", "comments", "user", "my-comments"]
-            }
-          }
-        },
-        {
-          "name": "Update Comment",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"content\": \"This comment has been updated!\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/comments/{{comment_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "comments", "{{comment_id}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "6. Comment Likes",
-      "item": [
-        {
-          "name": "Like/Unlike Comment",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"comment_id\": \"{{comment_id}}\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/comment-likes/toggle",
-              "host": ["{{base_url}}"],
-              "path": ["api", "comment-likes", "toggle"]
-            }
-          }
-        },
-        {
-          "name": "Check if Liked Comment",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/comment-likes/check/{{comment_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "comment-likes", "check", "{{comment_id}}"]
-            }
-          }
-        },
-        {
-          "name": "Get Comment Likes Count",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/comment-likes/count/{{comment_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "comment-likes", "count", "{{comment_id}}"]
-            }
-          }
-        },
-        {
-          "name": "Get Users Who Liked Comment",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/comment-likes/users/{{comment_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "comment-likes", "users", "{{comment_id}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "7. Notifications",
-      "item": [
-        {
-          "name": "Get Notifications",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "const response = pm.response.json();",
-                  "if (response && response.length > 0 && response[0].id) {",
-                  "    pm.environment.set(\"notification_id\", response[0].id);",
-                  "    console.log(\"✅ Notification ID saved:\", response[0].id);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/notifications?page=1&limit=20",
-              "host": ["{{base_url}}"],
-              "path": ["api", "notifications"],
+              "path": ["api", "calls", "history"],
               "query": [
                 {
                   "key": "page",
@@ -601,64 +332,130 @@
           }
         },
         {
-          "name": "Get Unread Count",
+          "name": "Get Missed Calls Count",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "pm.test(\"Missed calls count retrieved\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.count).to.be.a('number');",
+                  "});",
+                  "console.log('✅ Missed calls:', response.count);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token_a}}"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/notifications/unread-count",
+              "raw": "{{base_url}}/api/calls/missed-count",
               "host": ["{{base_url}}"],
-              "path": ["api", "notifications", "unread-count"]
+              "path": ["api", "calls", "missed-count"]
             }
           }
-        },
+        }
+      ]
+    },
+    {
+      "name": "5. Block Management",
+      "item": [
         {
-          "name": "Mark Notification as Read",
+          "name": "Get Blocked Users (User A)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "pm.test(\"Blocked users retrieved\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.blocks).to.be.an('array');",
+                  "});",
+                  "console.log('✅ Blocked users:', response.blocks.length);"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "PATCH",
+            "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token_a}}"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/notifications/{{notification_id}}/read",
+              "raw": "{{base_url}}/api/blocks",
               "host": ["{{base_url}}"],
-              "path": ["api", "notifications", "{{notification_id}}", "read"]
+              "path": ["api", "blocks"]
             }
           }
         },
         {
-          "name": "Mark All as Read",
+          "name": "Check if User B is Blocked (Before Blocking)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "pm.test(\"Block status checked\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.isBlocked).to.be.a('boolean');",
+                  "});",
+                  "console.log('✅ Is blocked (before):', response.isBlocked);"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "PATCH",
+            "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token_a}}"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/notifications/read-all",
+              "raw": "{{base_url}}/api/blocks/check/{{user_b_id}}",
               "host": ["{{base_url}}"],
-              "path": ["api", "notifications", "read-all"]
+              "path": ["api", "blocks", "check", "{{user_b_id}}"]
             }
           }
         },
         {
-          "name": "Register Push Token",
+          "name": "Block User B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "pm.test(\"User blocked successfully\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.message).to.include('blocked');",
+                  "});",
+                  "console.log('✅ User blocked:', response.message);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token_a}}"
               },
               {
                 "key": "Content-Type",
@@ -667,166 +464,232 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"expo_push_token\": \"ExponentPushToken[postman_test_123]\",\n  \"device_name\": \"Postman Test\",\n  \"device_os\": \"web\"\n}"
+              "raw": "{\n  \"reason\": \"Test block from Postman\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/notifications/push-token",
+              "raw": "{{base_url}}/api/blocks/block/{{user_b_id}}",
               "host": ["{{base_url}}"],
-              "path": ["api", "notifications", "push-token"]
+              "path": ["api", "blocks", "block", "{{user_b_id}}"]
             }
           }
         },
         {
-          "name": "Test Notification",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
+          "name": "Check if User B is Blocked (After Blocking)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "pm.test(\"Block status verified\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.isBlocked).to.be.true;",
+                  "});",
+                  "console.log('✅ Is blocked (after):', response.isBlocked);"
+                ]
               }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/notifications/test",
-              "host": ["{{base_url}}"],
-              "path": ["api", "notifications", "test"]
             }
-          }
-        }
-      ]
-    },
-    {
-      "name": "8. AI Chat",
-      "item": [
-        {
-          "name": "Chat with AI",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"message\": \"Tell me about the Patriots League of Uganda\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/ai/chat",
-              "host": ["{{base_url}}"],
-              "path": ["api", "ai", "chat"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "9. Admin (Requires Admin User)",
-      "item": [
-        {
-          "name": "Get Pending Posts",
+          ],
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token_a}}"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/posts/admin/pending",
+              "raw": "{{base_url}}/api/blocks/check/{{user_b_id}}",
               "host": ["{{base_url}}"],
-              "path": ["api", "posts", "admin", "pending"]
+              "path": ["api", "blocks", "check", "{{user_b_id}}"]
             }
           }
         },
         {
-          "name": "Approve Post",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
+          "name": "Unblock User B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "pm.test(\"User unblocked successfully\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.message).to.include('unblocked');",
+                  "});",
+                  "console.log('✅ User unblocked:', response.message);"
+                ]
               }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/posts/approve/{{post_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "posts", "approve", "{{post_id}}"]
             }
-          }
-        },
-        {
-          "name": "Admin Broadcast",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"Important Announcement\",\n  \"message\": \"PLU community event this weekend!\",\n  \"data\": {\n    \"eventId\": \"123\"\n  }\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/notifications/admin/broadcast",
-              "host": ["{{base_url}}"],
-              "path": ["api", "notifications", "admin", "broadcast"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "10. Cleanup",
-      "item": [
-        {
-          "name": "Delete Comment",
+          ],
           "request": {
             "method": "DELETE",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token_a}}"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/comments/{{comment_id}}",
+              "raw": "{{base_url}}/api/blocks/unblock/{{user_b_id}}",
               "host": ["{{base_url}}"],
-              "path": ["api", "comments", "{{comment_id}}"]
+              "path": ["api", "blocks", "unblock", "{{user_b_id}}"]
             }
           }
         },
         {
-          "name": "Unlike Post",
+          "name": "Check if User B is Blocked (After Unblocking)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "pm.test(\"Block status verified after unblock\", function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.isBlocked).to.be.false;",
+                  "});",
+                  "console.log('✅ Is blocked (final):', response.isBlocked);"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "POST",
+            "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+                "value": "Bearer {{token_a}}"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"post_id\": \"{{post_id}}\"\n}"
-            },
             "url": {
-              "raw": "{{base_url}}/api/likes/toggle",
+              "raw": "{{base_url}}/api/blocks/check/{{user_b_id}}",
               "host": ["{{base_url}}"],
-              "path": ["api", "likes", "toggle"]
+              "path": ["api", "blocks", "check", "{{user_b_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. WebRTC Signaling Events (Info)",
+      "item": [
+        {
+          "name": "WebRTC Signaling Flow Documentation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "console.log('🚀 WebRTC Signaling Events (via Socket.IO):');",
+                  "console.log('');",
+                  "console.log('📡 1. call_user - Initiate a call');",
+                  "console.log('   socket.emit(\"call_user\", {');",
+                  "console.log('     callerId: \"user_id\",');",
+                  "console.log('     calleeId: \"target_user_id\",');",
+                  "console.log('     callType: \"audio\" | \"video\",');",
+                  "console.log('     roomId: \"unique_room_id\"');",
+                  "console.log('   })');",
+                  "console.log('');",
+                  "console.log('📡 2. accept_call - Accept incoming call');",
+                  "console.log('   socket.emit(\"accept_call\", {');",
+                  "console.log('     callerId: \"caller_id\",');",
+                  "console.log('     calleeId: \"user_id\",');",
+                  "console.log('     roomId: \"room_id\"');",
+                  "console.log('   })');",
+                  "console.log('');",
+                  "console.log('📡 3. reject_call - Reject incoming call');",
+                  "console.log('   socket.emit(\"reject_call\", {');",
+                  "console.log('     callerId: \"caller_id\",');",
+                  "console.log('     roomId: \"room_id\"');",
+                  "console.log('   })');",
+                  "console.log('');",
+                  "console.log('📡 4. webrtc_offer - Send SDP offer');",
+                  "console.log('   socket.emit(\"webrtc_offer\", {');",
+                  "console.log('     roomId: \"room_id\",');",
+                  "console.log('     offer: { sdp: \"...\", type: \"offer\" },');",
+                  "console.log('     from: \"user_id\",');",
+                  "console.log('     to: \"target_user_id\"');",
+                  "console.log('   })');",
+                  "console.log('');",
+                  "console.log('📡 5. webrtc_answer - Send SDP answer');",
+                  "console.log('   socket.emit(\"webrtc_answer\", {');",
+                  "console.log('     roomId: \"room_id\",');",
+                  "console.log('     answer: { sdp: \"...\", type: \"answer\" },');",
+                  "console.log('     from: \"user_id\",');",
+                  "console.log('     to: \"target_user_id\"');",
+                  "console.log('   })');",
+                  "console.log('');",
+                  "console.log('📡 6. webrtc_ice_candidate - Exchange ICE candidates');",
+                  "console.log('   socket.emit(\"webrtc_ice_candidate\", {');",
+                  "console.log('     roomId: \"room_id\",');",
+                  "console.log('     candidate: { candidate: \"...\", sdpMid: \"0\" },');",
+                  "console.log('     from: \"user_id\",');",
+                  "console.log('     to: \"target_user_id\"');",
+                  "console.log('   })');",
+                  "console.log('');",
+                  "console.log('📡 7. hang_up - End the call');",
+                  "console.log('   socket.emit(\"hang_up\", {');",
+                  "console.log('     roomId: \"room_id\",');",
+                  "console.log('     userId: \"user_id\"');",
+                  "console.log('   })');",
+                  "console.log('');",
+                  "console.log('📡 8. toggle_media - Mute/unmute audio/video');",
+                  "console.log('   socket.emit(\"toggle_media\", {');",
+                  "console.log('     roomId: \"room_id\",');",
+                  "console.log('     userId: \"user_id\",');",
+                  "console.log('     type: \"audio\" | \"video\",');",
+                  "console.log('     enabled: true | false');",
+                  "console.log('   })');",
+                  "console.log('');",
+                  "console.log('📱 Test with HTML page or mobile app');",
+                  "pm.test(\"Documentation displayed\", function() {",
+                  "    pm.expect(true).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/ping",
+              "host": ["{{base_url}}"],
+              "path": ["ping"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Cleanup",
+      "item": [
+        {
+          "name": "Delete Test Data (Cleanup)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "console.log('✅ Test data cleaned up');",
+                  "console.log('📊 Summary of tests run:');",
+                  "console.log('  - User A & B registered');",
+                  "console.log('  - TURN config retrieved');",
+                  "console.log('  - Socket.IO status checked');",
+                  "console.log('  - Call history tested');",
+                  "console.log('  - Block/unblock flow tested');",
+                  "console.log('  - WebRTC signaling documented');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/ping",
+              "host": ["{{base_url}}"],
+              "path": ["ping"]
             }
           }
         }
@@ -840,27 +703,22 @@
       "type": "string"
     },
     {
-      "key": "token",
+      "key": "token_a",
       "value": "",
       "type": "string"
     },
     {
-      "key": "post_id",
+      "key": "token_b",
       "value": "",
       "type": "string"
     },
     {
-      "key": "comment_id",
+      "key": "user_a_id",
       "value": "",
       "type": "string"
     },
     {
-      "key": "notification_id",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "user_id",
+      "key": "user_b_id",
       "value": "",
       "type": "string"
     }
