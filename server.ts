@@ -617,14 +617,15 @@ app.get('/', (req: any, res: any) => {
 })
 
 // ====================== STARTUP ======================
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 10000
 
 sequelize.sync({ alter: true }).then(() => {
   console.log('✅ Database connected')
-  server.listen(PORT, () => {
-    console.log(`🚀 Server: http://localhost:${PORT}`)
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on 0.0.0.0:${PORT}`)
     console.log(`🔌 Socket.IO ready`)
   })
 })
+
 
 export default app
