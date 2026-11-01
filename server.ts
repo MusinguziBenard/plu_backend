@@ -617,7 +617,7 @@ app.get('/', (req: any, res: any) => {
 })
 
 // ====================== STARTUP ======================
-const PORT = process.env.PORT || 10000
+const PORT = Number(process.env.PORT) || 10000
 
 sequelize.sync({ alter: true }).then(() => {
   console.log('✅ Database connected')
@@ -626,6 +626,5 @@ sequelize.sync({ alter: true }).then(() => {
     console.log(`🔌 Socket.IO ready`)
   })
 })
-
 
 export default app
